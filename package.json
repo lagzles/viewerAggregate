@@ -1,0 +1,30 @@
+{
+  "name": "vieweraggregate",
+  "version": "1.0.0",
+  "description": "Aggregate Viewer Autodesk",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+    
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lagzles/viewerAggregate.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lagzles/viewerAggregate/issues"
+  },
+  "homepage": "https://github.com/lagzles/viewerAggregate#readme",
+  "dependencies": {
+    "@aps_sdk/authentication": "^1.0.0",
+    "@aps_sdk/model-derivative": "^1.1.0",
+    "@aps_sdk/oss": "^1.1.1",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-formidable": "^1.2.0"
+  }
+}
