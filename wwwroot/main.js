@@ -6,6 +6,9 @@ initViewer(document.getElementById('preview')).then(viewer => {
     setupModelUpload(viewer);
 });
 
+let refGlobalOffset = null;
+
+
 async function setupModelSelection(viewer, selectedUrn) {
     const dropdown = document.getElementById('models');
     dropdown.innerHTML = '';
@@ -88,7 +91,11 @@ async function onModelSelected(viewer, urn) {
                 break;
             default:
                 clearNotification();
-                loadModel(viewer, urn);
+                // loadModel(viewer, urn);
+
+                const model = await loadModel(viewer, urn);
+                const rawOffset = model.getData().globalOffset;
+                refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
                 break; 
         }
     } catch (err) {
@@ -140,6 +147,27 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
                             return;
                         }
                         const model = await addViewableWithToken(viewer, urn, accessToken.access_token);
+                        const rawOffset = model.getData().globalOffset;
+                        console.log(`rawOffset ${rawOffset}`);
+                        const currentOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
+                        // const currentOffset = model.getData().globalOffset;
+                        console.log(`currentOffset ${currentOffset}`);
+
+                        if (!refGlobalOffset) {
+                            // Primeiro modelo define a referência
+                            refGlobalOffset = currentOffset.clone();
+                        } else {
+                            // Calcula diferença e aplica transformação
+                            const delta = new THREE.Vector3().subVectors(refGlobalOffset, currentOffset);
+                            const transform = new THREE.Matrix4().makeTranslation(delta.x, delta.y, delta.z);
+
+                            // Remove o anterior e recarrega com correção
+                            viewer.unloadModel(model);
+                            const correctedModel = await addViewableWithToken(viewer, urn, accessToken.access_token, transform);
+                            loadedUrns.set(urn, correctedModel);
+                            return; // evita setar o modelo original abaixo
+                        }
+
                         loadedUrns.set(urn, model);
                         clearNotification();
                     } catch (err) {

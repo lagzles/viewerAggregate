@@ -45,11 +45,16 @@ export function initViewer(container) {
 export function loadModel(viewer, urn) {
     return new Promise(function (resolve, reject) {
         function onDocumentLoadSuccess(doc) {
-            resolve(viewer.loadDocumentNode(doc, doc.getRoot().getDefaultGeometry()));
+            const viewable = doc.getRoot().getDefaultGeometry();
+            viewer.loadDocumentNode(doc, viewable)
+                .then(model => resolve(model)) // só resolve quando o modelo estiver pronto
+                .catch(reject);
         }
+
         function onDocumentLoadFailure(code, message, errors) {
             reject({ code, message, errors });
         }
+
         viewer.setLightPreset(0);
         Autodesk.Viewing.Document.load('urn:' + urn, onDocumentLoadSuccess, onDocumentLoadFailure);
     });
