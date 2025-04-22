@@ -1,6 +1,6 @@
 const express = require('express');
 const formidable = require('express-formidable');
-const { listObjects, uploadObject, translateObject, getManifest, urnify } = require('../services/aps.js');
+const { listObjects, uploadObject, translateObject, getManifest, urnify, deleteObject } = require('../services/aps.js');
 
 let router = express.Router();
 
@@ -57,5 +57,20 @@ router.post('/api/models', formidable({ maxFileSize: Infinity }), async function
         next(err);
     }
 });
+
+
+router.delete('/api/models/:urn', async (req, res) => {
+    try {
+        const urn = req.params.urn;
+        const objectKey = urn;// Buffer.from(urn, 'base64').toString('utf8'); // reverso do "urnify"
+        console.log(`Deleting object `);
+        await deleteObject(objectKey);
+        res.status(204).end();
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Erro ao excluir objeto');
+    }
+});
+
 
 module.exports = router;

@@ -58,6 +58,11 @@ service.uploadObject = async (objectName, filePath) => {
     return obj;
 };
 
+service.deleteObject = async (objectKey) => {
+    const accessToken = await getInternalToken();
+    await ossClient.deleteObject(APS_BUCKET, objectKey, { accessToken });
+};
+
 
 service.translateObject = async (urn, rootFilename) => {
     const accessToken = await getInternalToken();

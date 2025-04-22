@@ -53,3 +53,25 @@ body, html {
     flex: 0 1 auto;
     min-width: 2em;
 }
+
+
+#sidebar {
+    width: 300px;
+    height: calc(100vh - 60px);
+    overflow-y: auto;
+    background-color: #f0f0f0;
+    border-right: 1px solid #ccc;
+    padding: 10px;
+    position: absolute;
+    top: 60px;
+    left: 0;
+    z-index: 10;
+}
+
+#preview {
+    position: absolute;
+    left: 250px;
+    top: 60px;
+    right: 0;
+    bottom: 0;
+}
