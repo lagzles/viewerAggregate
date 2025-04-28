@@ -7,6 +7,7 @@ initViewer(document.getElementById('preview')).then(viewer => {
 });
 
 let refGlobalOffset = null;
+let refModelData
 
 
 async function setupModelSelection(viewer, selectedUrn) {
@@ -94,6 +95,8 @@ async function onModelSelected(viewer, urn) {
                 // loadModel(viewer, urn);
 
                 const model = await loadModel(viewer, urn);
+                debugModelInfo(model, 'modelo base carregado');
+                refModelData = model.getData();
                 const rawOffset = model.getData().globalOffset;
                 refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
                 console.log(`refGlobalOffset ${refGlobalOffset.x}, ${refGlobalOffset.y}, ${refGlobalOffset.z}`);
@@ -119,6 +122,87 @@ function clearNotification() {
 
 let loadedUrns = new Map();
 
+function debugModelInfo(model, label = 'Modelo') {
+    const data = model.getData();
+
+    console.log(`\n===== DEBUG ${label} =====`);
+
+    // Global Offset
+    console.log('Global Offset:', data.globalOffset);
+
+    // Placement With Offset
+    if (data.placementWithOffset) {
+        const placementMatrix = new THREE.Matrix4().fromArray(data.placementWithOffset.elements);
+        console.log('Placement With Offset Matrix:');
+        console.log(placementMatrix);
+    } else {
+        console.log('Placement With Offset: undefined');
+    }
+
+    // Ref Point Transform
+    if (data.refPointTransform) {
+        const refPointMatrix = new THREE.Matrix4().fromArray(data.refPointTransform.elements);
+        console.log('Reference Point Transform Matrix:');
+        console.log(refPointMatrix);
+    } else {
+        console.log('Reference Point Transform: undefined');
+    }
+
+    // Model Bounding Box
+    if (data.modelSpaceBBox) {
+        console.log('Model Space Bounding Box:');
+        console.log('  Min:', data.modelSpaceBBox.min);
+        console.log('  Max:', data.modelSpaceBBox.max);
+    } else {
+        console.log('Model Space Bounding Box: undefined');
+    }
+
+    console.log('===== END DEBUG =====\n');
+}
+
+
+
+function calculateCorrectionMatrix(refModelData, modelData) {
+    const placementBaseArray = refModelData.placementWithOffset.elements;
+    const placementTargetArray = modelData.placementWithOffset.elements;
+
+    const placementBase = new THREE.Matrix4().fromArray(placementBaseArray);
+    const placementTarget = new THREE.Matrix4().fromArray(placementTargetArray);
+
+    const correctionMatrix = new THREE.Matrix4().multiplyMatrices(
+        placementBase.clone().invert(),
+        placementTarget
+    );
+
+    return correctionMatrix;
+}
+
+function calculateCorrectionMatrixUsingRefPoint(refModelData, modelData) {
+    const refPointBaseArray = refModelData.refPointTransform.elements;
+    const refPointTargetArray = modelData.refPointTransform.elements;
+
+    const refPointBase = new THREE.Matrix4().fromArray(refPointBaseArray);
+    const refPointTarget = new THREE.Matrix4().fromArray(refPointTargetArray);
+
+    const correctionMatrix = new THREE.Matrix4().multiplyMatrices(
+        refPointBase.clone().invert(), // inverso da base
+        refPointTarget // aplicado ao modelo target
+    );
+
+    return correctionMatrix;
+}
+function calculateSimpleTranslationCorrection(refModelData, modelData) {
+    const refElements = refModelData.refPointTransform.elements;
+    const modelElements = modelData.refPointTransform.elements;
+
+    const deltaX = refElements[12] - modelElements[12];
+    const deltaY = refElements[13] - modelElements[13];
+    const deltaZ = refElements[14] - modelElements[14];
+
+    return new THREE.Matrix4().makeTranslation(deltaX, deltaY, deltaZ);
+}
+
+
 function updateSidebarModelList(models, selectedUrn, viewer) {
     const listContainer = document.getElementById('model-list');
     models.sort((a, b) => a.name.localeCompare(b.name));
@@ -141,41 +225,36 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
                 if (!loadedUrns.has(urn)) {
                     try {
                         showNotification(`Carregando modelo ${urn}...`);
-                        // const model = await addViewable(viewer, urn);
+                        
                         const accessToken = await getMyAccesToken();
                         if (!accessToken) {
                             alert('Could not obtain access token. See the console for more details.');
                             return;
                         }
                         const model = await addViewableWithToken(viewer, urn, accessToken.access_token);
-                        const rawOffset = model.getData().globalOffset;
-                        const currentOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
+                        debugModelInfo(model, 'modelo agregado!!!!');
 
-                        if (!refGlobalOffset) {
-                            // Primeiro modelo define a referência
-                            refGlobalOffset = currentOffset.clone();
-                        } else {
-                            // Calcula diferença e aplica transformação
-                            console.log("========================================================================================")
-                            console.log("RefOffset")  //   refGlobalOffset
-                            console.log(`refGlobalOffset ${refGlobalOffset.x}, ${refGlobalOffset.y}, ${refGlobalOffset.z}`);
+                        console.log("================================================2")
+                        console.log('model.getData()', model.getData()) //placementWithOffset
+                        console.log("================================================2")
 
-                            // const delta = new THREE.Vector3().subVectors(refGlobalOffset, currentOffset);
-                            const delta = new THREE.Vector3().subVectors(currentOffset, refGlobalOffset);
-                            const transform = new THREE.Matrix4().makeTranslation(delta.x, delta.y, delta.z);
-                            console.log("========================================================================================")
-                            console.log(`rawOffset ${rawOffset.x}, ${rawOffset.y}, ${rawOffset.z}`);
-                            console.log(`currentOffset ${currentOffset.x}, ${currentOffset.y}, ${currentOffset.z}`);
-                            console.log(`delta ${delta.x}, ${delta.y}, ${delta.z}`);
-                            console.log(`transform ${transform}   `);
-                            console.log(`transform ${transform.elements}   `);
-                            console.log("========================================================================================")
+                        const modelData = model.getData();
+                        const correctionMatrix = calculateSimpleTranslationCorrection(refModelData, modelData);
+                        
+                        const modelGlobalOffset = modelData.globalOffset;
+                        const offsetVector = new THREE.Vector3(modelGlobalOffset.x, modelGlobalOffset.y, modelGlobalOffset.z);
+                        
+                        const correctedModel = await addViewableWithToken(
+                          viewer,
+                          urn,
+                          accessToken.access_token,
+                          correctionMatrix,
+                          offsetVector
+                        );
 
-                            // Remove o anterior e recarrega com correção
-                            viewer.unloadModel(model);
-                            const correctedModel = await addViewableWithToken(viewer, urn, accessToken.access_token, transform, rawOffset);
-                            loadedUrns.set(urn, correctedModel);
-                        }
+                        viewer.unloadModel(model);
+                        
+                        loadedUrns.set(urn, correctedModel);
 
                         // loadedUrns.set(urn, model);
                         clearNotification();
