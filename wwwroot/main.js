@@ -162,37 +162,33 @@ function debugModelInfo(model, label = 'Modelo') {
     console.log('===== END DEBUG =====\n');
 }
 
-
-
-function calculateCorrectionMatrix(refModelData, modelData) {
-    const placementBaseArray = refModelData.placementWithOffset.elements;
-    const placementTargetArray = modelData.placementWithOffset.elements;
-
-    const placementBase = new THREE.Matrix4().fromArray(placementBaseArray);
-    const placementTarget = new THREE.Matrix4().fromArray(placementTargetArray);
-
-    const correctionMatrix = new THREE.Matrix4().multiplyMatrices(
-        placementBase.clone().invert(),
-        placementTarget
-    );
-
-    return correctionMatrix;
+// After loading all models
+function alignAllModels(viewer, models) {
+    if (models.length < 2) return;
+    
+    const refModel = models[0];
+    const refBbox = refModel.getFragmentList().getWorldBoundingBox();
+    
+    for (let i = 1; i < models.length; i++) {
+        const model = models[i];
+        const bbox = model.getFragmentList().getWorldBoundingBox();
+        
+        const dx = refBbox.min.x - bbox.min.x;
+        const dy = refBbox.min.y - bbox.min.y;
+        const dz = refBbox.min.z - bbox.min.z;
+        
+        const fragments = model.getFragmentList();
+        const fragCount = fragments.fragments.fragId2dbId.length;
+        
+        for (let fragId = 0; fragId < fragCount; fragId++) {
+            fragments.updateFragmentTransform(fragId, 
+                new THREE.Matrix4().makeTranslation(dx, dy, dz));
+        }
+        
+        model.getFragmentList().updateAnimTransform();
+    }
 }
 
-function calculateCorrectionMatrixUsingRefPoint(refModelData, modelData) {
-    const refPointBaseArray = refModelData.refPointTransform.elements;
-    const refPointTargetArray = modelData.refPointTransform.elements;
-
-    const refPointBase = new THREE.Matrix4().fromArray(refPointBaseArray);
-    const refPointTarget = new THREE.Matrix4().fromArray(refPointTargetArray);
-
-    const correctionMatrix = new THREE.Matrix4().multiplyMatrices(
-        refPointBase.clone().invert(), // inverso da base
-        refPointTarget // aplicado ao modelo target
-    );
-
-    return correctionMatrix;
-}
 function calculateSimpleTranslationCorrection(refModelData, modelData) {
     const refElements = refModelData.refPointTransform.elements;
     const modelElements = modelData.refPointTransform.elements;
@@ -203,6 +199,118 @@ function calculateSimpleTranslationCorrection(refModelData, modelData) {
 
     return new THREE.Matrix4().makeTranslation(deltaX, deltaY, deltaZ);
 }
+
+
+
+// Get model metadata without loading the full model
+async function getModelMetadata2(urn, token) {
+    return new Promise((resolve, reject) => {
+        Autodesk.Viewing.endpoint.HTTP_REQUEST_HEADERS = {
+            Authorization: `Bearer ${token}`
+        };
+        
+        Autodesk.Viewing.Document.load(
+            "urn:" + urn,
+            (doc) => {
+                const metadata = {
+                    name: doc.getRoot().name,
+                    refPointTransform: doc.getRoot().getDefaultGeometry().refPointTransform,
+                    globalOffset: doc.getRoot().getDefaultGeometry().globalOffset
+                };
+                resolve(metadata);
+            },
+            (error) => reject(error)
+        );
+    });
+}
+
+async function getModelMetadata(urn, token) {
+    return new Promise((resolve, reject) => {
+        Autodesk.Viewing.endpoint.HTTP_REQUEST_HEADERS = {
+            Authorization: `Bearer ${token}`
+        };
+
+        Autodesk.Viewing.Document.load(
+            "urn:" + urn,
+            (doc) => {
+                const geometry = doc.getRoot().getDefaultGeometry();
+                const metadata = {
+                    name: doc.getRoot().name,
+                    refPointTransform: geometry.refPointTransform,
+                    globalOffset: geometry.globalOffset,
+                    modelSpaceBBox: geometry.boundingBox 
+                };
+                resolve(metadata);
+            },
+            (error) => reject(error)
+        );
+    });
+}
+
+
+function calculateOptimalAlignment(refData, modelData) {
+    // First try using Revit's reference points if available
+    if (refData?.refPointTransform && modelData?.refPointTransform) {
+        try {
+            const refMatrix = new THREE.Matrix4().fromArray(refData.refPointTransform.elements);
+            const modelMatrix = new THREE.Matrix4().fromArray(modelData.refPointTransform.elements);
+            
+            const correctionMatrix = new THREE.Matrix4()
+                .copy(modelMatrix)
+                .invert()
+                .multiply(refMatrix);
+                
+            return {
+                matrix: correctionMatrix,
+                offset: { x: 0, y: 0, z: 0 }
+            };
+        } catch (err) {
+            console.warn('Failed to use refPointTransform, falling back to bounding box:', err);
+        }
+    }
+    
+    // Fallback to bounding box alignment
+    return calculateBoundingBoxAlignment(refData, modelData);
+}
+
+function calculateBoundingBoxAlignment(refData, modelData) {
+    // Default safe values if bounding boxes are missing
+    const defaultBbox = {
+        min: { x: 0, y: 0, z: 0 },
+        max: { x: 0, y: 0, z: 0 }
+    };
+    
+    // Safely get bounding boxes with fallbacks
+    const refBbox = refData?.modelSpaceBBox || defaultBbox;
+    const modelBbox = modelData?.modelSpaceBBox || defaultBbox;
+    
+    // Calculate centroids safely
+    const refCenter = new THREE.Vector3(
+        (refBbox.min.x + refBbox.max.x) / 2,
+        (refBbox.min.y + refBbox.max.y) / 2,
+        (refBbox.min.z + refBbox.max.z) / 2
+    );
+    
+    const modelCenter = new THREE.Vector3(
+        (modelBbox.min.x + modelBbox.max.x) / 2,
+        (modelBbox.min.y + modelBbox.max.y) / 2,
+        (modelBbox.min.z + modelBbox.max.z) / 2
+    );
+    
+    const translation = new THREE.Vector3()
+        .subVectors(refCenter, modelCenter);
+    
+    return {
+        matrix: new THREE.Matrix4().makeTranslation(
+            translation.x,
+            translation.y,
+            translation.z
+        ),
+        offset: { x: 0, y: 0, z: 0 }
+    };
+}
+
+
 
 
 function updateSidebarModelList(models, selectedUrn, viewer) {
@@ -222,47 +330,56 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
     listContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
         checkbox.addEventListener('change', async (event) => {
             const urn = event.target.value;
-
+    
             if (event.target.checked) {
                 if (!loadedUrns.has(urn)) {
                     try {
-                        showNotification(`Carregando modelo ${urn}...`);
+                        showNotification(`Loading model ${urn}...`);
                         
                         const accessToken = await getMyAccesToken();
                         if (!accessToken) {
-                            alert('Could not obtain access token. See the console for more details.');
-                            return;
+                            throw new Error('Could not obtain access token');
                         }
-                        const model = await addViewableWithToken(viewer, urn, accessToken.access_token);
-                        debugModelInfo(model, 'modelo agregado!!!!');
-
-                        console.log("================================================2")
-                        console.log('model.getData()', model.getData()) //placementWithOffset
-                        console.log("================================================2")
-
-                        const modelData = model.getData();
-                        const correctionMatrix = calculateSimpleTranslationCorrection(refModelData, modelData);
-                        
-                        const modelGlobalOffset = modelData.globalOffset;
-                        const offsetVector = new THREE.Vector3(modelGlobalOffset.x, modelGlobalOffset.y, modelGlobalOffset.z);
-                        
-                        const correctedModel = await addViewableWithToken(
-                          viewer,
-                          urn,
-                          accessToken.access_token,
-                          correctionMatrix,
-                          offsetVector
+        
+                        const isFirstModel = loadedUrns.size === 0;
+                        const loadOptions = {
+                            globalOffset: { x: 0, y: 0, z: 0 },
+                            placementTransform: new THREE.Matrix4(),
+                            applyRefPoint: true,
+                            keepCurrentModels: true
+                        };
+        
+                        if (!isFirstModel && refModelData) {
+                            try {
+                                const modelData = await getModelMetadata(urn, accessToken.access_token);
+                                const correction = calculateOptimalAlignment(refModelData, modelData);
+                                loadOptions.placementTransform = correction.matrix;
+                                loadOptions.globalOffset = correction.offset;
+                            } catch (err) {
+                                console.warn('Alignment calculation failed, using default position:', err);
+                            }
+                        }
+        
+                        const model = await addViewableWithToken(
+                            viewer,
+                            urn,
+                            accessToken.access_token,
+                            loadOptions.placementTransform,
+                            loadOptions.globalOffset
                         );
-
-                        viewer.unloadModel(model);
-                        
-                        loadedUrns.set(urn, correctedModel);
-
-                        // loadedUrns.set(urn, model);
+        
+                        if (isFirstModel) {
+                            refModelData = model.getData();
+                            const rawOffset = refModelData.globalOffset;
+                            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
+                        }
+        
+                        loadedUrns.set(urn, model);
                         clearNotification();
                     } catch (err) {
-                        alert(`Erro ao carregar modelo ${urn}`);
-                        console.error(err);
+                        console.error(`Error loading model ${urn}:`, err);
+                        event.target.checked = false; // Uncheck the box
+                        alert(`Failed to load model: ${err.message}`);
                     }
                 }
             } else {
@@ -270,7 +387,7 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
                 if (model) {
                     viewer.unloadModel(model);
                     loadedUrns.delete(urn);
-                    console.log(`Modelo ${urn} descarregado`);
+                    console.log(`Unloaded model ${urn}`);
                 }
             }
         });
