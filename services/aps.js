@@ -74,19 +74,19 @@ service.translateObject = async (urn, rootFilename) => {
         },
         output: {
             formats: [
-                {
-                    type: OutputType.Svf,
-                    views: [View._2d, View._3d],
-                    advanced: {
-                        generateMasterViews: true,
-                        coordinationModel: true,
-                        hiddenObjects: false,
-                        basicMaterialProperties: true,
-                        autodeskMaterialProperties: true,
-                        buildingStoreys: "show",
-                        spaces: "show"
-                    }
-                },
+                // {
+                //     type: OutputType.Svf,
+                //     views: [View._2d, View._3d],
+                //     advanced: {
+                //         generateMasterViews: true,
+                //         coordinationModel: true,
+                //         hiddenObjects: false,
+                //         basicMaterialProperties: true,
+                //         autodeskMaterialProperties: true,
+                //         buildingStoreys: "show",
+                //         spaces: "show"
+                //     }
+                // },
                 {
                     type: OutputType.Svf2,
                     views: [View._3d],

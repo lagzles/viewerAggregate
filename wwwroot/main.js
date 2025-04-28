@@ -18,7 +18,9 @@ async function setupModelSelection(viewer, selectedUrn) {
         if (!resp.ok) {
             throw new Error(await resp.text());
         }
-        const models = await resp.json();
+        let models = await resp.json();
+        models.sort((a, b) => a.name.localeCompare(b.name));
+
         dropdown.innerHTML = models.map(model => `<option value=${model.urn} ${model.urn === selectedUrn ? 'selected' : ''}>${model.name}</option>`).join('\n');
         dropdown.onchange = () => onModelSelected(viewer, dropdown.value);
         if (dropdown.value) {
