@@ -4,10 +4,13 @@ initViewer(document.getElementById('preview')).then(viewer => {
     const urn = window.location.hash?.substring(1);
     setupModelSelection(viewer, urn);
     setupModelUpload(viewer);
+    setupCompositeControls(viewer); // Add this line
 });
 
 let refGlobalOffset = null;
 let refModelData
+let compositeDesigns = [];
+let currentCompositeModels = new Set();
 
 
 async function setupModelSelection(viewer, selectedUrn) {
@@ -162,67 +165,6 @@ function debugModelInfo(model, label = 'Modelo') {
     console.log('===== END DEBUG =====\n');
 }
 
-// After loading all models
-function alignAllModels(viewer, models) {
-    if (models.length < 2) return;
-    
-    const refModel = models[0];
-    const refBbox = refModel.getFragmentList().getWorldBoundingBox();
-    
-    for (let i = 1; i < models.length; i++) {
-        const model = models[i];
-        const bbox = model.getFragmentList().getWorldBoundingBox();
-        
-        const dx = refBbox.min.x - bbox.min.x;
-        const dy = refBbox.min.y - bbox.min.y;
-        const dz = refBbox.min.z - bbox.min.z;
-        
-        const fragments = model.getFragmentList();
-        const fragCount = fragments.fragments.fragId2dbId.length;
-        
-        for (let fragId = 0; fragId < fragCount; fragId++) {
-            fragments.updateFragmentTransform(fragId, 
-                new THREE.Matrix4().makeTranslation(dx, dy, dz));
-        }
-        
-        model.getFragmentList().updateAnimTransform();
-    }
-}
-
-function calculateSimpleTranslationCorrection(refModelData, modelData) {
-    const refElements = refModelData.refPointTransform.elements;
-    const modelElements = modelData.refPointTransform.elements;
-
-    const deltaX = refElements[12] - modelElements[12];
-    const deltaY = refElements[13] - modelElements[13];
-    const deltaZ = refElements[14] - modelElements[14];
-
-    return new THREE.Matrix4().makeTranslation(deltaX, deltaY, deltaZ);
-}
-
-
-
-// Get model metadata without loading the full model
-async function getModelMetadata2(urn, token) {
-    return new Promise((resolve, reject) => {
-        Autodesk.Viewing.endpoint.HTTP_REQUEST_HEADERS = {
-            Authorization: `Bearer ${token}`
-        };
-        
-        Autodesk.Viewing.Document.load(
-            "urn:" + urn,
-            (doc) => {
-                const metadata = {
-                    name: doc.getRoot().name,
-                    refPointTransform: doc.getRoot().getDefaultGeometry().refPointTransform,
-                    globalOffset: doc.getRoot().getDefaultGeometry().globalOffset
-                };
-                resolve(metadata);
-            },
-            (error) => reject(error)
-        );
-    });
-}
 
 async function getModelMetadata(urn, token) {
     return new Promise((resolve, reject) => {
@@ -427,33 +369,6 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
 }
 
 
-function addViewable(viewer, urn, xform, offset) {
-    return new Promise(function (resolve, reject) {
-        function onDocumentLoadSuccess(doc) {
-            const viewable = doc.getRoot().getDefaultGeometry();
-            const options = {
-                keepCurrentModels: true
-            };
-            if (xform) options.placementTransform = xform;
-            if (offset) options.globalOffset = offset;
-
-            viewer
-                .loadDocumentNode(doc, viewable, options)
-                .then(model => resolve(model)) // <- retorna o model carregado
-                .catch(reject);
-        }
-
-        function onDocumentLoadFailure(code) {
-            reject(`Could not load document (${code}).`);
-        }
-
-        Autodesk.Viewing.Document.load(
-            "urn:" + urn,
-            onDocumentLoadSuccess,
-            onDocumentLoadFailure
-        );
-    });
-}
 
 async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
     return new Promise((resolve, reject) => {
@@ -484,5 +399,149 @@ async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
             }
         );
     });
+}
+
+// ==========================================================================================
+// inserindo functions para buscar agregados
+
+async function createCompositeDesign(name, primaryUrn, secondaryUrns) {
+    showNotification(`Creating composite design "${name}"...`);
+    
+    try {
+        const response = await fetch('/api/composite-designs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name,
+                primaryUrn,
+                secondaryUrns: Array.from(secondaryUrns)
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+        
+        const result = await response.json();
+        compositeDesigns.push(result);
+        renderCompositeDesigns();
+        clearNotification();
+        return result;
+    } catch (err) {
+        console.error('Error creating composite:', err);
+        alert(`Failed to create composite: ${err.message}`);
+        clearNotification();
+        throw err;
+    }
+}
+
+// composite list
+function renderCompositeDesigns() {
+    const container = document.getElementById('composite-list');
+    container.innerHTML = compositeDesigns.map(design => `
+        <div class="composite-item">
+            <span>${design.name}</span>
+            <button onclick="loadCompositeDesign('${design.id}')">Load</button>
+        </div>
+    `).join('');
+}
+
+// composite design - esta sendo chamada no renderCompositeDesigns
+async function loadCompositeDesign(designId) {
+    const design = compositeDesigns.find(d => d.id === designId);
+    if (!design) {
+        alert('Composite design not found');
+        return;
+    }
+    
+    showNotification(`Loading composite design "${design.name}"...`);
+    
+    try {
+        // First unload all currently loaded models
+        for (const urn of loadedUrns.keys()) {
+            viewer.unloadModel(loadedUrns.get(urn));
+        }
+        loadedUrns.clear();
+        
+        // Load the primary model
+        const primaryModel = await loadModel(viewer, design.primaryUrn);
+        loadedUrns.set(design.primaryUrn, primaryModel);
+        
+        // Load secondary models with their transforms
+        for (const secondary of design.secondaryModels) {
+            const options = {
+                globalOffset: secondary.offset,
+                placementTransform: new THREE.Matrix4().fromArray(secondary.matrix),
+                applyRefPoint: true,
+                keepCurrentModels: true
+            };
+            
+            const model = await addViewableWithToken(
+                viewer,
+                secondary.urn,
+                await getMyAccesToken(),
+                options.placementTransform,
+                options.globalOffset
+            );
+            
+            loadedUrns.set(secondary.urn, model);
+        }
+        
+        clearNotification();
+    } catch (err) {
+        console.error('Error loading composite:', err);
+        alert(`Failed to load composite: ${err.message}`);
+        clearNotification();
+    }
+}
+
+function setupCompositeControls(viewer) {
+    const compositeSection = document.getElementById('composite-section');
+    const createBtn = document.getElementById('create-composite');
+    
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'c' && e.ctrlKey) {
+            compositeSection.style.display = compositeSection.style.display === 'none' ? 'block' : 'none';
+        }
+    });
+    
+    createBtn.addEventListener('click', async () => {
+        const name = document.getElementById('composite-name').value.trim();
+        if (!name) {
+            alert('Please enter a name for the composite design');
+            return;
+        }
+        
+        if (loadedUrns.size < 2) {
+            alert('You need at least 2 models loaded to create a composite');
+            return;
+        }
+        
+        const urns = Array.from(loadedUrns.keys());
+        const primaryUrn = urns[0]; // First loaded model is primary
+        const secondaryUrns = urns.slice(1);
+        
+        const secondaryModels = [];
+        for (const urn of secondaryUrns) {
+            const model = loadedUrns.get(urn);
+            const data = model.getData();
+            
+            secondaryModels.push({
+                urn,
+                matrix: data.placementWithOffset.elements,
+                offset: data.globalOffset
+            });
+        }
+        
+        await createCompositeDesign(name, primaryUrn, secondaryModels);
+    });
+    
+    fetch('/api/composite-designs')
+        .then(res => res.json())
+        .then(designs => {
+            compositeDesigns = designs;
+            renderCompositeDesigns();
+        })
+        .catch(console.error);
 }
 

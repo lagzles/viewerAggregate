@@ -16,10 +16,6 @@ export async function getMyAccesToken(){
 
 async function getAccessToken(callback) {
     try {
-        // const resp = await fetch('/api/auth/token');
-        // if (!resp.ok) {
-        //     throw new Error(await resp.text());
-        // }
         const { access_token, expires_in } = await getMyAccesToken();
         callback(access_token, expires_in);
     } catch (err) {
@@ -57,5 +53,28 @@ export function loadModel(viewer, urn) {
 
         viewer.setLightPreset(0);
         Autodesk.Viewing.Document.load('urn:' + urn, onDocumentLoadSuccess, onDocumentLoadFailure);
+    });
+}
+
+
+
+export async function loadCompositeModel(viewer, compositeUrn) {
+    // This would be similar to loadModel but for composites
+    const options = {
+        applyRefPoint: true,
+        keepCurrentModels: false
+    };
+    
+    return new Promise((resolve, reject) => {
+        Autodesk.Viewing.Document.load(
+            `urn:${compositeUrn}`,
+            doc => {
+                const viewable = doc.getRoot().getDefaultGeometry();
+                viewer.loadDocumentNode(doc, viewable, options)
+                    .then(model => resolve(model))
+                    .catch(reject);
+            },
+            reject
+        );
     });
 }
