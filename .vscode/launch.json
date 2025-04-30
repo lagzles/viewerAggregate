@@ -1,26 +1,38 @@
 {
     "version": "0.2.0",
     "configurations": [
-      {
-        "name": "Attach to Chrome",
-        "port": 9222,
-        "request": "attach",
-        "type": "chrome",
-        "webRoot": "${workspaceFolder}"
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch Program",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/server.js",
+      "outFiles": [
+        "${workspaceFolder}/**/*.js"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach to Process",
+      "port": 9229,
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Debug main.js in Chrome",
+      "url": "http://localhost:8080", // Match your dev server port
+      "webRoot": "${workspaceFolder}/wwwroot", // Where your index.html lives
+      "sourceMapPathOverrides": {
+        "/main.js": "${webRoot}/main.js" // Explicit path mapping
       },
-      
-      {
-        "type": "chrome",
-        "request": "launch",
-        "name": "Debug on chrome",
-        "url": "http://localhost:8080",
-        "webRoot": "${workspaceFolder}",
-        "sourceMaps": true,
-        "trace": true,
-        "skipFiles": ["<node_internals>/**"]
-        // "sourceMapPathOverrides": {
-        //   "webpack:///*": "${webRoot}/*"
-        // }
-      },
-    ]
+      "skipFiles": ["node_modules/**"],
+      "trace": true // Optional: for debugging the debugger
+    }
+  ]
   }

@@ -27,7 +27,7 @@ async function setupModelSelection(viewer, selectedUrn) {
         dropdown.innerHTML = models.map(model => `<option value=${model.urn} ${model.urn === selectedUrn ? 'selected' : ''}>${model.name}</option>`).join('\n');
         dropdown.onchange = () => onModelSelected(viewer, dropdown.value);
         if (dropdown.value) {
-            onModelSelected(viewer, dropdown.value);
+            // onModelSelected(viewer, dropdown.value);
         }
 
         updateSidebarModelList(models, dropdown.value, viewer);
@@ -98,13 +98,35 @@ async function onModelSelected(viewer, urn) {
             default:
                 clearNotification();
                 // loadModel(viewer, urn);
+                const accessToken = await getMyAccesToken();
+                if (!accessToken) {
+                    throw new Error('Could not obtain access token');
+                }
 
-                const model = await loadModel(viewer, urn);
-                debugModelInfo(model, 'modelo base carregado');
+                const loadOptions = {
+                    globalOffset: { x: 0, y: 0, z: 0 },
+                    placementTransform: new THREE.Matrix4(),
+                    applyRefPoint: true,
+                    keepCurrentModels: true
+                };
+
+                const model = await loadModel(viewer, urn, loadOptions);
+                // const modelito = await addViewableWithToken(
+                //     viewer,
+                //     urn,
+                //     accessToken.access_token,
+                //     loadOptions.placementTransform,
+                //     loadOptions.globalOffset
+                // );
+
                 refModelData = model.getData();
-                const rawOffset = model.getData().globalOffset;
+                const rawOffset = refModelData.globalOffset;
                 refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
-                console.log(`refGlobalOffset ${refGlobalOffset.x}, ${refGlobalOffset.y}, ${refGlobalOffset.z}`);
+
+                debugModelInfo(model, 'modelo base carregado');
+                
+                loadedUrns = new Map();
+                loadedUrns.set(urn, model);
                 break; 
         }
     } catch (err) {
@@ -293,10 +315,14 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
         
                         if (!isFirstModel && refModelData) {
                             try {
+                                // const aggregatedModel = await viewer.loadModel(viewer, urn, loadOptions);
+                                // const modelData = aggregatedModel.getData();//  await getModelMetadata(urn, accessToken.access_token);
                                 const modelData = await getModelMetadata(urn, accessToken.access_token);
                                 const correction = calculateOptimalAlignment(refModelData, modelData);
                                 loadOptions.placementTransform = correction.matrix;
                                 loadOptions.globalOffset = correction.offset;
+
+                                viewer.unloadModel(urn);
                             } catch (err) {
                                 console.warn('Alignment calculation failed, using default position:', err);
                             }

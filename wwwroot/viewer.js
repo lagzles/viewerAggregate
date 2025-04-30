@@ -38,11 +38,11 @@ export function initViewer(container) {
     });
 }
 
-export function loadModel(viewer, urn) {
+export function loadModel(viewer, urn, options = {}) {
     return new Promise(function (resolve, reject) {
         function onDocumentLoadSuccess(doc) {
             const viewable = doc.getRoot().getDefaultGeometry();
-            viewer.loadDocumentNode(doc, viewable)
+            viewer.loadDocumentNode(doc, viewable, options)
                 .then(model => resolve(model)) // só resolve quando o modelo estiver pronto
                 .catch(reject);
         }
