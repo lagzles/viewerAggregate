@@ -275,8 +275,6 @@ function calculateBoundingBoxAlignment(refData, modelData) {
 }
 
 
-
-
 function updateSidebarModelList(models, selectedUrn, viewer) {
     const listContainer = document.getElementById('model-list');
     models.sort((a, b) => a.name.localeCompare(b.name));
@@ -312,21 +310,26 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
                             applyRefPoint: true,
                             keepCurrentModels: true
                         };
-        
-                        if (!isFirstModel && refModelData) {
+                        const aggregatedModel = await addViewableWithToken(viewer, urn, accessToken.access_token, loadOptions.placementTransform, loadOptions.globalOffset);
+                        const modelData = aggregatedModel.getData();//  await getModelMetadata(urn, accessToken.access_token);
+                        if (isFirstModel) {
+                            refModelData = modelData; // model.getData();
+                            const rawOffset = refModelData.globalOffset;
+                            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
+                        }
+                        
+                        if (!isFirstModel && refModelData || true) {
                             try {
-                                // const aggregatedModel = await viewer.loadModel(viewer, urn, loadOptions);
-                                // const modelData = aggregatedModel.getData();//  await getModelMetadata(urn, accessToken.access_token);
-                                const modelData = await getModelMetadata(urn, accessToken.access_token);
                                 const correction = calculateOptimalAlignment(refModelData, modelData);
                                 loadOptions.placementTransform = correction.matrix;
                                 loadOptions.globalOffset = correction.offset;
 
-                                viewer.unloadModel(urn);
+                                // viewer.unloadModel(urn);
                             } catch (err) {
                                 console.warn('Alignment calculation failed, using default position:', err);
                             }
                         }
+                        viewer.unloadModel(urn);
         
                         const model = await addViewableWithToken(
                             viewer,
@@ -336,11 +339,7 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
                             loadOptions.globalOffset
                         );
         
-                        if (isFirstModel) {
-                            refModelData = model.getData();
-                            const rawOffset = refModelData.globalOffset;
-                            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
-                        }
+                       
         
                         loadedUrns.set(urn, model);
                         clearNotification();
@@ -393,7 +392,6 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
     });
     
 }
-
 
 
 async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
