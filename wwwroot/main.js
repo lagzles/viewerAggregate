@@ -4,7 +4,7 @@ initViewer(document.getElementById('preview')).then(viewer => {
     const urn = window.location.hash?.substring(1);
     setupModelSelection(viewer, urn);
     setupModelUpload(viewer);
-    setupCompositeControls(viewer); // Add this line
+    setupCompositeControls(viewer);
 });
 
 let refGlobalOffset = null;
@@ -498,7 +498,6 @@ async function fetchObjectTree(urn, guid, token) {
     )
     return await res.json();
 }
-
 
 
 
