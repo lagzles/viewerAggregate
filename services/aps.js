@@ -91,7 +91,9 @@ service.translateObject = async (urn, rootFilename) => {
                     type: OutputType.Svf2,
                     views: [View._3d],
                     advanced: {
-                        coordinationModel: true
+                        coordinationModel: true,
+                        generateMasterViews: true,
+                        buildingStoreys: "show",
                     }
                 }
             ]

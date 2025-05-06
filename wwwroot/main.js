@@ -302,6 +302,11 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
                         if (!accessToken) {
                             throw new Error('Could not obtain access token');
                         }
+
+                        const fetchedModelMetadata = await getCompleteModelMetadata(urn, accessToken.access_token);
+                        if (!fetchedModelMetadata) {    
+                            console.error(`Failed to fetch model metadata for ${urn}`);
+                        }
         
                         const isFirstModel = loadedUrns.size === 0;
                         const loadOptions = {
@@ -353,6 +358,7 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
                 const model = loadedUrns.get(urn);
                 if (model) {
                     viewer.unloadModel(model);
+                    viewer.unloadModel(urn);
                     loadedUrns.delete(urn);
                     console.log(`Unloaded model ${urn}`);
                 }
@@ -424,6 +430,77 @@ async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
         );
     });
 }
+
+
+
+
+//===========================================================================================
+
+async function getCompleteModelMetadata(urn, token) {
+    try {
+        // 1. Get manifest
+        const manifest = await fetchManifest(urn, token);
+        
+        // 2. Get metadata GUID
+        const metadataGuid = findMetadataGuid(manifest);
+        if (!metadataGuid) throw new Error('Metadata not available');
+        
+        // 3. Get metadata properties
+        const metadata = await fetchMetadataProperties(urn, metadataGuid, token);
+        
+        // 4. Get object tree for additional data
+        const objectTree = await fetchObjectTree(urn, metadataGuid, token);
+        
+        return {
+            ...metadata,
+            objectTree
+        };
+    } catch (err) {
+        console.error('Error fetching metadata:', err);
+        return null;
+    }
+}
+
+// Helper functions
+async function fetchManifest(urn, token) {
+    const res = await fetch(`https://developer.api.autodesk.com/modelderivative/v2/designdata/${urn}/manifest`, {
+        headers: { Authorization: `Bearer ${token}` }
+    });
+    return await res.json();
+}
+
+function findMetadataGuid(manifest) {
+    const derivative = manifest.derivatives.find(d => d.outputType === 'svf2');
+    if (!derivative) return null;
+    const type_metadata = derivative.children.find(c => c.type === 'metadata');
+    if(type_metadata) return type_metadata.guid;
+    
+    const role_metadata = derivative.children.find(c => c.role.includes('ModelData'));
+    return role_metadata.guid || null;
+}
+
+async function fetchMetadataProperties(urn, guid, token) {
+    const res = await fetch(
+        `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urn}/metadata/${guid}/properties`,
+        {
+             headers: { Authorization: `Bearer ${token}` }
+        }
+    );
+    return await res.json();
+}
+
+async function fetchObjectTree(urn, guid, token) {
+    const res = await fetch(
+        `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urn}/metadata/${guid}/objects`,
+        { 
+            headers: { Authorization: `Bearer ${token}` }
+        }
+    )
+    return await res.json();
+}
+
+
+
 
 // ==========================================================================================
 // inserindo functions para buscar agregados
