@@ -8,4 +8,5 @@ app.use(require('./routes/models.js'));
 app.listen(PORT, function () { 
     console.log(`Server listening on port ${PORT}...`);
     console.log(`http://localhost:${PORT}`);
+    console.log(`http://localhost:${PORT}`);
  });
