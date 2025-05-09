@@ -89,12 +89,25 @@ service.translateObject = async (urn, rootFilename) => {
                 // },
                 {
                     type: OutputType.Svf2,
-                    views: [View._3d],
+                    views: [View._3d, View._2d],
                     advanced: {
-                        coordinationModel: true,
                         generateMasterViews: true,
+                        coordinationModel: true,
+                        hiddenObjects: false,
+                        basicMaterialProperties: true,
+                        autodeskMaterialProperties: true,
                         buildingStoreys: "show",
+                        spaces: "show",
+                        includeMetadata: true,
+                        exportFileStructure: "single"
                     }
+                    // advanced: {
+                    //     coordinationModel: true,
+                    //     generateMasterViews: true,
+                    //     buildingStoreys: "show",
+                    //     includeMetadata: true,
+                    //     exportFileStructure: "single"
+                    // }
                 }
             ]
         }

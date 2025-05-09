@@ -57,6 +57,25 @@ export function loadModel(viewer, urn, options = {}) {
 }
 
 
+export function loadModelNoOptions(viewer, urn) {
+    return new Promise(function (resolve, reject) {
+        function onDocumentLoadSuccess(doc) {
+            const viewable = doc.getRoot().getDefaultGeometry();
+            viewer.loadDocumentNode(doc, viewable)
+                .then(model => resolve(model)) // só resolve quando o modelo estiver pronto
+                .catch(reject);
+        }
+
+        function onDocumentLoadFailure(code, message, errors) {
+            reject({ code, message, errors });
+        }
+
+        viewer.setLightPreset(0);
+        Autodesk.Viewing.Document.load('urn:' + urn, onDocumentLoadSuccess, onDocumentLoadFailure);
+    });
+}
+
+
 
 export async function loadCompositeModel(viewer, compositeUrn) {
     // This would be similar to loadModel but for composites

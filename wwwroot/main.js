@@ -1,4 +1,4 @@
-import { initViewer, loadModel, getMyAccesToken } from './viewer.js';
+import { initViewer, loadModel, getMyAccesToken, loadModelNoOptions } from './viewer.js';
 
 initViewer(document.getElementById('preview')).then(viewer => {
     const urn = window.location.hash?.substring(1);
@@ -98,32 +98,31 @@ async function onModelSelected(viewer, urn) {
             default:
                 clearNotification();
                 // loadModel(viewer, urn);
-                const accessToken = await getMyAccesToken();
-                if (!accessToken) {
-                    throw new Error('Could not obtain access token');
-                }
+                // const accessToken = await getMyAccesToken();
+                // if (!accessToken) {
+                //     throw new Error('Could not obtain access token');
+                // }
 
-                const loadOptions = {
-                    globalOffset: { x: 0, y: 0, z: 0 },
-                    placementTransform: new THREE.Matrix4(),
-                    applyRefPoint: true,
-                    keepCurrentModels: true
-                };
+                // const loadOptions = {
+                //     globalOffset: { x: 0, y: 0, z: 0 },
+                //     placementTransform: new THREE.Matrix4(),
+                //     applyRefPoint: true,
+                //     keepCurrentModels: true
+                // };
 
-                const model = await loadModel(viewer, urn, loadOptions);
-                // const modelito = await addViewableWithToken(
-                //     viewer,
-                //     urn,
-                //     accessToken.access_token,
-                //     loadOptions.placementTransform,
-                //     loadOptions.globalOffset
-                // );
+                // let model = await loadModel(viewer, urn, loadOptions);
+                // const modelData = model.getData();
+                // refModelData = model.getData();
+                // const rawOffset = refModelData.globalOffset;
+                // refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
 
-                refModelData = model.getData();
-                const rawOffset = refModelData.globalOffset;
-                refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
+                // const correction = calculateOptimalAlignment(refModelData, modelData);
+                // loadOptions.placementTransform = correction.matrix;
+                // loadOptions.globalOffset = correction.offset;
+                // viewer.unloadModel(model);
+                // model = await loadModel(viewer, urn, loadOptions);
 
-                debugModelInfo(model, 'modelo base carregado');
+                // debugModelInfo(model, 'modelo base carregado');
                 
                 loadedUrns = new Map();
                 loadedUrns.set(urn, model);
@@ -149,131 +148,78 @@ function clearNotification() {
 
 let loadedUrns = new Map();
 
-function debugModelInfo(model, label = 'Modelo') {
-    const data = model.getData();
 
-    console.log(`\n===== DEBUG ${label} =====`);
+async function loadUrnToViewer(urn, viewer){
+    try {
+        showNotification(`Loading model ${urn}...`);
+        
+        const accessToken = await getMyAccesToken();
+        if (!accessToken) {
+            throw new Error('Could not obtain access token');
+        }
 
-    // Global Offset
-    console.log('Global Offset:', data.globalOffset);
+        const isFirstModel = loadedUrns.size === 0;
+        let loadedCleanModel = null;
 
-    // Placement With Offset
-    if (data.placementWithOffset) {
-        const placementMatrix = new THREE.Matrix4().fromArray(data.placementWithOffset.elements);
-        console.log('Placement With Offset Matrix:');
-        console.log(placementMatrix);
-    } else {
-        console.log('Placement With Offset: undefined');
-    }
+        if(isFirstModel) {
+            loadedCleanModel = await loadModelNoOptions(viewer, urn);
+        }else{
+            loadedCleanModel = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
+        }
 
-    // Ref Point Transform
-    if (data.refPointTransform) {
-        const refPointMatrix = new THREE.Matrix4().fromArray(data.refPointTransform.elements);
-        console.log('Reference Point Transform Matrix:');
-        console.log(refPointMatrix);
-    } else {
-        console.log('Reference Point Transform: undefined');
-    }
+        const modelData = loadedCleanModel.getData();
 
-    // Model Bounding Box
-    if (data.modelSpaceBBox) {
-        console.log('Model Space Bounding Box:');
-        console.log('  Min:', data.modelSpaceBBox.min);
-        console.log('  Max:', data.modelSpaceBBox.max);
-    } else {
-        console.log('Model Space Bounding Box: undefined');
-    }
-
-    console.log('===== END DEBUG =====\n');
-}
-
-
-async function getModelMetadata(urn, token) {
-    return new Promise((resolve, reject) => {
-        Autodesk.Viewing.endpoint.HTTP_REQUEST_HEADERS = {
-            Authorization: `Bearer ${token}`
+        const loadOptions = {
+            globalOffset: modelData.globalOffset,//  { x: 0, y: 0, z: 0 },
+            // placementTransform: modelData.placementWithOffset,
+            placementTransform: new THREE.Matrix4(),
+            applyRefPoint: true,
+            keepCurrentModels: true
         };
 
-        Autodesk.Viewing.Document.load(
-            "urn:" + urn,
-            (doc) => {
-                const geometry = doc.getRoot().getDefaultGeometry();
-                const metadata = {
-                    name: doc.getRoot().name,
-                    refPointTransform: geometry.refPointTransform,
-                    globalOffset: geometry.globalOffset,
-                    modelSpaceBBox: geometry.boundingBox 
-                };
-                resolve(metadata);
-            },
-            (error) => reject(error)
-        );
-    });
-}
-
-
-function calculateOptimalAlignment(refData, modelData) {
-    // First try using Revit's reference points if available
-    if (refData?.refPointTransform && modelData?.refPointTransform) {
-        try {
-            const refMatrix = new THREE.Matrix4().fromArray(refData.refPointTransform.elements);
-            const modelMatrix = new THREE.Matrix4().fromArray(modelData.refPointTransform.elements);
-            
-            const correctionMatrix = new THREE.Matrix4()
-                .copy(modelMatrix)
-                .invert()
-                .multiply(refMatrix);
-                
-            return {
-                matrix: correctionMatrix,
-                offset: { x: 0, y: 0, z: 0 }
-            };
-        } catch (err) {
-            console.warn('Failed to use refPointTransform, falling back to bounding box:', err);
+        // const aggregatedModel = await addViewableWithToken(viewer, urn, accessToken.access_token, loadOptions.placementTransform, loadOptions.globalOffset);
+        // const modelData = aggregatedModel.getData();//  await getModelMetadata(urn, accessToken.access_token);
+        if (isFirstModel) {
+            refModelData = modelData; // model.getData();
+            const rawOffset = modelData.globalOffset;
+            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
         }
+        
+        if (!isFirstModel && refModelData) {// || true) {
+            try {
+                // const correction = calculateOptimalAlignment(refModelData, modelData);
+                // loadOptions.placementTransform = correction.matrix;
+
+                // loadOptions.globalOffset = correction.offset;
+                // loadOptions.placementTransform = modelData.placementWithOffset,// correction.matrix;
+                loadOptions.globalOffset = refGlobalOffset;
+                loadOptions.placementTransform = new THREE.Matrix4();
+
+
+            } catch (err) {
+                console.warn('Alignment calculation failed, using default position:', err);
+            }
+        }
+        console.log('loadOptions', loadOptions);
+        viewer.unloadModel(loadedCleanModel);
+
+        const model = await addViewableWithToken(
+            viewer,
+            urn,
+            accessToken.access_token,
+            loadOptions.placementTransform,
+            loadOptions.globalOffset
+        );
+
+        loadedUrns.set(urn, model);
+        clearNotification();
+    } catch (err) {
+        console.error(`Error loading model ${urn}:`, err);
+        event.target.checked = false; // Uncheck the box
+        alert(`Failed to load model: ${err.message}`);
     }
-    
-    // Fallback to bounding box alignment
-    return calculateBoundingBoxAlignment(refData, modelData);
-}
 
-function calculateBoundingBoxAlignment(refData, modelData) {
-    // Default safe values if bounding boxes are missing
-    const defaultBbox = {
-        min: { x: 0, y: 0, z: 0 },
-        max: { x: 0, y: 0, z: 0 }
-    };
-    
-    // Safely get bounding boxes with fallbacks
-    const refBbox = refData?.modelSpaceBBox || defaultBbox;
-    const modelBbox = modelData?.modelSpaceBBox || defaultBbox;
-    
-    // Calculate centroids safely
-    const refCenter = new THREE.Vector3(
-        (refBbox.min.x + refBbox.max.x) / 2,
-        (refBbox.min.y + refBbox.max.y) / 2,
-        (refBbox.min.z + refBbox.max.z) / 2
-    );
-    
-    const modelCenter = new THREE.Vector3(
-        (modelBbox.min.x + modelBbox.max.x) / 2,
-        (modelBbox.min.y + modelBbox.max.y) / 2,
-        (modelBbox.min.z + modelBbox.max.z) / 2
-    );
-    
-    const translation = new THREE.Vector3()
-        .subVectors(refCenter, modelCenter);
-    
-    return {
-        matrix: new THREE.Matrix4().makeTranslation(
-            translation.x,
-            translation.y,
-            translation.z
-        ),
-        offset: { x: 0, y: 0, z: 0 }
-    };
 }
-
 
 function updateSidebarModelList(models, selectedUrn, viewer) {
     const listContainer = document.getElementById('model-list');
@@ -281,7 +227,7 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
 
     listContainer.innerHTML = models.map(model => `
         <div>
-            <label>
+            <label class="checkbox-label" data-urn="${model.urn}">
                 <input type="checkbox" value="${model.urn}">
                 ${model.name}
             </label>
@@ -295,72 +241,21 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
     
             if (event.target.checked) {
                 if (!loadedUrns.has(urn)) {
-                    try {
-                        showNotification(`Loading model ${urn}...`);
-                        
-                        const accessToken = await getMyAccesToken();
-                        if (!accessToken) {
-                            throw new Error('Could not obtain access token');
-                        }
-
-                        const fetchedModelMetadata = await getCompleteModelMetadata(urn, accessToken.access_token);
-                        if (!fetchedModelMetadata) {    
-                            console.error(`Failed to fetch model metadata for ${urn}`);
-                        }
-        
-                        const isFirstModel = loadedUrns.size === 0;
-                        const loadOptions = {
-                            globalOffset: { x: 0, y: 0, z: 0 },
-                            placementTransform: new THREE.Matrix4(),
-                            applyRefPoint: true,
-                            keepCurrentModels: true
-                        };
-                        const aggregatedModel = await addViewableWithToken(viewer, urn, accessToken.access_token, loadOptions.placementTransform, loadOptions.globalOffset);
-                        const modelData = aggregatedModel.getData();//  await getModelMetadata(urn, accessToken.access_token);
-                        if (isFirstModel) {
-                            refModelData = modelData; // model.getData();
-                            const rawOffset = refModelData.globalOffset;
-                            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
-                        }
-                        
-                        if (!isFirstModel && refModelData || true) {
-                            try {
-                                const correction = calculateOptimalAlignment(refModelData, modelData);
-                                loadOptions.placementTransform = correction.matrix;
-                                loadOptions.globalOffset = correction.offset;
-
-                                // viewer.unloadModel(urn);
-                            } catch (err) {
-                                console.warn('Alignment calculation failed, using default position:', err);
-                            }
-                        }
-                        viewer.unloadModel(urn);
-        
-                        const model = await addViewableWithToken(
-                            viewer,
-                            urn,
-                            accessToken.access_token,
-                            loadOptions.placementTransform,
-                            loadOptions.globalOffset
-                        );
-        
-                       
-        
-                        loadedUrns.set(urn, model);
-                        clearNotification();
-                    } catch (err) {
-                        console.error(`Error loading model ${urn}:`, err);
-                        event.target.checked = false; // Uncheck the box
-                        alert(`Failed to load model: ${err.message}`);
-                    }
+                    loadUrnToViewer(urn, viewer);
                 }
             } else {
+                // viewer.impl.modelQueue().getModels().forEach(m => console.log(m));
+
                 const model = loadedUrns.get(urn);
                 if (model) {
-                    viewer.unloadModel(model);
-                    viewer.unloadModel(urn);
-                    loadedUrns.delete(urn);
-                    console.log(`Unloaded model ${urn}`);
+                    try {
+                        viewer.unloadModel(model);
+                        loadedUrns.delete(urn);
+                        console.log(`Successfully unloaded ${urn}`);
+                        // logLoadedModels(viewer); // Debug helper
+                    } catch (err) {
+                        console.error(`Failed to unload ${urn}:`, err);
+                    }
                 }
             }
         });
@@ -432,72 +327,6 @@ async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
 }
 
 
-
-
-//===========================================================================================
-
-async function getCompleteModelMetadata(urn, token) {
-    try {
-        // 1. Get manifest
-        const manifest = await fetchManifest(urn, token);
-        
-        // 2. Get metadata GUID
-        const metadataGuid = findMetadataGuid(manifest);
-        if (!metadataGuid) throw new Error('Metadata not available');
-        
-        // 3. Get metadata properties
-        const metadata = await fetchMetadataProperties(urn, metadataGuid, token);
-        
-        // 4. Get object tree for additional data
-        const objectTree = await fetchObjectTree(urn, metadataGuid, token);
-        
-        return {
-            ...metadata,
-            objectTree
-        };
-    } catch (err) {
-        console.error('Error fetching metadata:', err);
-        return null;
-    }
-}
-
-// Helper functions
-async function fetchManifest(urn, token) {
-    const res = await fetch(`https://developer.api.autodesk.com/modelderivative/v2/designdata/${urn}/manifest`, {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-    return await res.json();
-}
-
-function findMetadataGuid(manifest) {
-    const derivative = manifest.derivatives.find(d => d.outputType === 'svf2');
-    if (!derivative) return null;
-    const type_metadata = derivative.children.find(c => c.type === 'metadata');
-    if(type_metadata) return type_metadata.guid;
-    
-    const role_metadata = derivative.children.find(c => c.role.includes('ModelData'));
-    return role_metadata.guid || null;
-}
-
-async function fetchMetadataProperties(urn, guid, token) {
-    const res = await fetch(
-        `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urn}/metadata/${guid}/properties`,
-        {
-             headers: { Authorization: `Bearer ${token}` }
-        }
-    );
-    return await res.json();
-}
-
-async function fetchObjectTree(urn, guid, token) {
-    const res = await fetch(
-        `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urn}/metadata/${guid}/objects`,
-        { 
-            headers: { Authorization: `Bearer ${token}` }
-        }
-    )
-    return await res.json();
-}
 
 
 

@@ -56,7 +56,7 @@ body, html {
 
 
 #sidebar {
-    width: 300px;
+    width: 350px;
     height: calc(100vh - 60px);
     overflow-y: auto;
     background-color: #f0f0f0;
@@ -66,6 +66,12 @@ body, html {
     top: 60px;
     left: 0;
     z-index: 10;
+    font-size: medium;
+}
+
+.checkbox-label{
+    font-size: 10px;
+    font-family: ArtifaktElement;
 }
 
 #preview {
