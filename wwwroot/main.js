@@ -149,6 +149,171 @@ function clearNotification() {
 let loadedUrns = new Map();
 
 
+
+async function loadUrnToViewerLikeNavis(urn, viewer){
+    try {
+        showNotification(`Loading model ${urn}...`);
+        
+        const accessToken = await getMyAccesToken();
+        if (!accessToken) {
+            throw new Error('Could not obtain access token');
+        }
+
+        const isFirstModel = loadedUrns.size === 0;
+        let loadedCleanModel = null;
+
+        if(isFirstModel) {
+            loadedCleanModel = await loadModelNoOptions(viewer, urn);
+        }else{
+            loadedCleanModel = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
+        }
+
+        const modelData = loadedCleanModel.getData();
+
+        const loadOptions = {
+            globalOffset: modelData.globalOffset,//  { x: 0, y: 0, z: 0 },
+            // placementTransform: modelData.placementWithOffset,
+            placementTransform: new THREE.Matrix4(),
+            applyRefPoint: true,
+            keepCurrentModels: true
+        };
+
+        if (isFirstModel) {
+            refModelData = modelData; // model.getData();
+            const rawOffset = modelData.globalOffset;
+            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
+        }
+        
+        if (!isFirstModel && refModelData) {// || true) {
+            try {
+                loadOptions.globalOffset = refGlobalOffset;
+                loadOptions.placementTransform = new THREE.Matrix4();
+            } catch (err) {
+                console.warn('Alignment calculation failed, using default position:', err);
+            }
+        }
+        console.log('loadOptions', loadOptions);
+        viewer.unloadModel(loadedCleanModel);
+
+        const model = await addViewableWithToken(
+            viewer,
+            urn,
+            accessToken.access_token,
+            loadOptions.placementTransform,
+            loadOptions.globalOffset
+        );
+
+        loadedUrns.set(urn, model);
+        clearNotification();
+    } catch (err) {
+        console.error(`Error loading model ${urn}:`, err);
+        event.target.checked = false; // Uncheck the box
+        alert(`Failed to load model: ${err.message}`);
+    }
+}
+
+async function loadAndAlignModel(urn, viewer) {
+    // 1. First load the model with default settings to get its raw data
+    const initialLoadOptions = {
+        globalOffset: { x: 0, y: 0, z: 0 },
+        placementTransform: new THREE.Matrix4(),
+        applyRefPoint: true,
+        keepCurrentModels: true
+    };
+
+    const accessToken = await getMyAccesToken();
+    if (!accessToken) {
+        throw new Error('Could not obtain access token');
+    }
+
+    const isFirstModel = loadedUrns.size === 0;
+    const isReferenceModel = isFirstModel;
+    let model = null;
+
+    if(isFirstModel) {
+        model = await loadModelNoOptions(viewer, urn);
+        
+    }else{
+        model = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
+    }
+    
+    const modelData = model.getData();
+    
+    // 2. Analyze all available transformation data
+    const transformAnalysis = {
+        hasGlobalOffset: !!modelData.globalOffset,
+        hasPlacementWithOffset: !!modelData.placementWithOffset,
+        hasRefPointTransform: !!modelData.refPointTransform,
+        bbox: modelData.bbox
+    };
+    
+    console.log(`Transform analysis for ${urn}:`, transformAnalysis);
+
+    // 3. Determine the optimal loading strategy
+    let finalLoadOptions = { ...initialLoadOptions };
+    
+    if (isReferenceModel) {
+        // For reference model, store its data and load as-is
+        refModelData = modelData;
+        refGlobalOffset = modelData.globalOffset;
+        loadedUrns.set(urn, model);
+        return model;
+    }
+    else if (modelData.refPointTransform && refModelData?.refPointTransform) {
+        // Case 1: Use refPointTransform if available in both models
+        const refMatrix = new THREE.Matrix4().fromArray(refModelData.refPointTransform);
+        const modelMatrix = new THREE.Matrix4().fromArray(modelData.refPointTransform);
+        const correctionMatrix = new THREE.Matrix4()
+            .copy(modelMatrix)
+            .invert()
+            .multiply(refMatrix);
+        
+        finalLoadOptions.placementTransform = correctionMatrix;
+        finalLoadOptions.globalOffset = refModelData.globalOffset;
+    }
+    else if (modelData.placementWithOffset) {
+        // Case 2: Use placementWithOffset if available
+        finalLoadOptions.placementTransform = new THREE.Matrix4()
+            .fromArray(modelData.placementWithOffset.elements);
+    }
+    else if (modelData.globalOffset) {
+        // Case 3: Use globalOffset as last resort
+        finalLoadOptions.globalOffset = modelData.globalOffset;
+    }
+
+    viewer.unloadModel(model);
+    const lastModelloaded = await addViewableWithToken(
+            viewer,
+            urn,
+            accessToken.access_token,
+            finalLoadOptions.placementTransform,
+            finalLoadOptions.globalOffset
+        );
+
+    loadedUrns.set(urn, lastModelloaded);
+    // 4. Reload the model with proper transforms if needed
+    if (hasTransformChanged(initialLoadOptions, finalLoadOptions)) {
+        return 
+    }else{
+        return await addViewableWithToken(
+            viewer,
+            urn,
+            accessToken.access_token,
+            finalLoadOptions.placementTransform,
+            finalLoadOptions.globalOffset
+        );
+    }
+}
+
+function hasTransformChanged(initial, final) {
+    return (
+        !initial.placementTransform.equals(final.placementTransform) ||
+        initial.globalOffset.x !== final.globalOffset.x ||
+        initial.globalOffset.y !== final.globalOffset.y ||
+        initial.globalOffset.z !== final.globalOffset.z
+    );
+}
+
 async function loadUrnToViewer(urn, viewer){
     try {
         showNotification(`Loading model ${urn}...`);
@@ -177,8 +342,6 @@ async function loadUrnToViewer(urn, viewer){
             keepCurrentModels: true
         };
 
-        // const aggregatedModel = await addViewableWithToken(viewer, urn, accessToken.access_token, loadOptions.placementTransform, loadOptions.globalOffset);
-        // const modelData = aggregatedModel.getData();//  await getModelMetadata(urn, accessToken.access_token);
         if (isFirstModel) {
             refModelData = modelData; // model.getData();
             const rawOffset = modelData.globalOffset;
@@ -187,15 +350,8 @@ async function loadUrnToViewer(urn, viewer){
         
         if (!isFirstModel && refModelData) {// || true) {
             try {
-                // const correction = calculateOptimalAlignment(refModelData, modelData);
-                // loadOptions.placementTransform = correction.matrix;
-
-                // loadOptions.globalOffset = correction.offset;
-                // loadOptions.placementTransform = modelData.placementWithOffset,// correction.matrix;
                 loadOptions.globalOffset = refGlobalOffset;
                 loadOptions.placementTransform = new THREE.Matrix4();
-
-
             } catch (err) {
                 console.warn('Alignment calculation failed, using default position:', err);
             }
@@ -218,7 +374,6 @@ async function loadUrnToViewer(urn, viewer){
         event.target.checked = false; // Uncheck the box
         alert(`Failed to load model: ${err.message}`);
     }
-
 }
 
 function updateSidebarModelList(models, selectedUrn, viewer) {
@@ -242,6 +397,7 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
             if (event.target.checked) {
                 if (!loadedUrns.has(urn)) {
                     loadUrnToViewer(urn, viewer);
+                    // loadAndAlignModel(urn, viewer);
                 }
             } else {
                 // viewer.impl.modelQueue().getModels().forEach(m => console.log(m));
