@@ -76,7 +76,7 @@ body, html {
 
 #preview {
     position: absolute;
-    left: 250px;
+    left: 350px;
     top: 60px;
     right: 0;
     bottom: 0;
@@ -85,13 +85,16 @@ body, html {
 #composite-section {
     position: fixed;
     right: 20px;
-    top: 60px;
+    top: 80px;
     width: 300px;
     background: white;
     padding: 15px;
     border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    z-index: 100;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+    display: block;
+    max-height: 80vh;
+    overflow-y: auto;
 }
 
 #composite-controls {

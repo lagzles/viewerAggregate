@@ -150,68 +150,6 @@ let loadedUrns = new Map();
 
 
 
-async function loadUrnToViewerLikeNavis(urn, viewer){
-    try {
-        showNotification(`Loading model ${urn}...`);
-        
-        const accessToken = await getMyAccesToken();
-        if (!accessToken) {
-            throw new Error('Could not obtain access token');
-        }
-
-        const isFirstModel = loadedUrns.size === 0;
-        let loadedCleanModel = null;
-
-        if(isFirstModel) {
-            loadedCleanModel = await loadModelNoOptions(viewer, urn);
-        }else{
-            loadedCleanModel = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
-        }
-
-        const modelData = loadedCleanModel.getData();
-
-        const loadOptions = {
-            globalOffset: modelData.globalOffset,//  { x: 0, y: 0, z: 0 },
-            // placementTransform: modelData.placementWithOffset,
-            placementTransform: new THREE.Matrix4(),
-            applyRefPoint: true,
-            keepCurrentModels: true
-        };
-
-        if (isFirstModel) {
-            refModelData = modelData; // model.getData();
-            const rawOffset = modelData.globalOffset;
-            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
-        }
-        
-        if (!isFirstModel && refModelData) {// || true) {
-            try {
-                loadOptions.globalOffset = refGlobalOffset;
-                loadOptions.placementTransform = new THREE.Matrix4();
-            } catch (err) {
-                console.warn('Alignment calculation failed, using default position:', err);
-            }
-        }
-        console.log('loadOptions', loadOptions);
-        viewer.unloadModel(loadedCleanModel);
-
-        const model = await addViewableWithToken(
-            viewer,
-            urn,
-            accessToken.access_token,
-            loadOptions.placementTransform,
-            loadOptions.globalOffset
-        );
-
-        loadedUrns.set(urn, model);
-        clearNotification();
-    } catch (err) {
-        console.error(`Error loading model ${urn}:`, err);
-        event.target.checked = false; // Uncheck the box
-        alert(`Failed to load model: ${err.message}`);
-    }
-}
-
 async function loadAndAlignModel(urn, viewer) {
     // 1. First load the model with default settings to get its raw data
     const initialLoadOptions = {
@@ -256,8 +194,9 @@ async function loadAndAlignModel(urn, viewer) {
         // For reference model, store its data and load as-is
         refModelData = modelData;
         refGlobalOffset = modelData.globalOffset;
-        loadedUrns.set(urn, model);
-        return model;
+        finalLoadOptions.globalOffset = refGlobalOffset;
+        // loadedUrns.set(urn, model);
+        // return model;
     }
     else if (modelData.refPointTransform && refModelData?.refPointTransform) {
         // Case 1: Use refPointTransform if available in both models
@@ -279,6 +218,10 @@ async function loadAndAlignModel(urn, viewer) {
     else if (modelData.globalOffset) {
         // Case 3: Use globalOffset as last resort
         finalLoadOptions.globalOffset = modelData.globalOffset;
+    }
+
+    if (!isReferenceModel) {
+        finalLoadOptions.globalOffset = refGlobalOffset;
     }
 
     viewer.unloadModel(model);
@@ -523,60 +466,54 @@ async function createCompositeDesign(name, primaryUrn, secondaryUrns) {
 // composite list
 function renderCompositeDesigns() {
     const container = document.getElementById('composite-list');
-    container.innerHTML = compositeDesigns.map(design => `
-        <div class="composite-item">
+    container.innerHTML = '';
+    
+    compositeDesigns.forEach(design => {
+        const item = document.createElement('div');
+        item.className = 'composite-item';
+        item.innerHTML = `
             <span>${design.name}</span>
-            <button onclick="loadCompositeDesign('${design.id}')">Load</button>
-        </div>
-    `).join('');
+            <button class="load-composite" data-design-id="${design.id}">Load</button>
+        `;
+        container.appendChild(item);
+    });
 }
 
 // composite design - esta sendo chamada no renderCompositeDesigns
-async function loadCompositeDesign(designId) {
-    const design = compositeDesigns.find(d => d.id === designId);
-    if (!design) {
-        alert('Composite design not found');
-        return;
-    }
-    
-    showNotification(`Loading composite design "${design.name}"...`);
-    
+async function loadCompositeDesign(viewer, design) {
     try {
-        // First unload all currently loaded models
-        for (const urn of loadedUrns.keys()) {
-            viewer.unloadModel(loadedUrns.get(urn));
+        // Clear existing models first
+        if(loadedUrns.size > 0) {
+            for (const model of loadedUrns.values()) {
+                viewer.unloadModel(model);
+            }
+            loadedUrns.clear();
         }
-        loadedUrns.clear();
+        // viewer.unloadAllModels();
         
-        // Load the primary model
+        // Load primary model
         const primaryModel = await loadModel(viewer, design.primaryUrn);
-        loadedUrns.set(design.primaryUrn, primaryModel);
         
         // Load secondary models with their transforms
         for (const secondary of design.secondaryModels) {
-            const options = {
-                globalOffset: secondary.offset,
-                placementTransform: new THREE.Matrix4().fromArray(secondary.matrix),
-                applyRefPoint: true,
-                keepCurrentModels: true
-            };
+            const model = await loadModel(viewer, secondary.urn);
             
-            const model = await addViewableWithToken(
-                viewer,
-                secondary.urn,
-                await getMyAccesToken(),
-                options.placementTransform,
-                options.globalOffset
-            );
+            // Apply the stored transformation
+            const matrix = new THREE.Matrix4();
+            matrix.fromArray(secondary.matrix);
+            model.setPlacementTransform(matrix);
             
-            loadedUrns.set(secondary.urn, model);
+            // Apply global offset if exists
+            if (secondary.offset) {
+                model.setGlobalOffset(secondary.offset);
+            }
         }
         
-        clearNotification();
-    } catch (err) {
-        console.error('Error loading composite:', err);
-        alert(`Failed to load composite: ${err.message}`);
-        clearNotification();
+        // Fit to view
+        viewer.fitToView();
+    } catch (error) {
+        console.error('Failed to load composite design:', error);
+        alert('Failed to load composite design. Check console for details.');
     }
 }
 
@@ -628,5 +565,18 @@ function setupCompositeControls(viewer) {
             renderCompositeDesigns();
         })
         .catch(console.error);
+
+
+
+    document.getElementById('composite-list').addEventListener('click', async (e) => {
+        if (e.target.classList.contains('load-composite')) {
+            const designId = e.target.dataset.designId;
+            const design = compositeDesigns.find(d => d.id === designId);
+            
+            if (design) {
+                await loadCompositeDesign(viewer, design);
+            }
+        }
+    });    
 }
 
