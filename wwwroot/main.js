@@ -2,8 +2,7 @@ import { initViewer, loadModel, getMyAccesToken, loadModelNoOptions } from './vi
 // import { loadMultimodelExtension } from './viewer.js';
 
 initViewer(document.getElementById('preview')).then(viewer => {
-    const urn = window.location.hash?.substring(1);
-    setupModelSelection(viewer, urn);
+    setupModelSelection(viewer);
     setupModelUpload(viewer);
     setupCompositeControls(viewer);
 });
@@ -14,7 +13,7 @@ let compositeDesigns = [];
 let currentCompositeModels = new Set();
 
 
-async function setupModelSelection(viewer, selectedUrn) {
+async function setupModelSelection(viewer) {
     try {
         const resp = await fetch('/api/models');
         if (!resp.ok) {
@@ -144,7 +143,7 @@ function updateSidebarModelList(models, viewer) {
     models.sort((a, b) => a.name.localeCompare(b.name));
 
     listContainer.innerHTML = models.map(model => `
-        <div>
+        <div data-urn="${model.urn}">
             <label class="checkbox-label" data-urn="${model.urn}">
                 <input type="checkbox" value="${model.urn}">
                 ${model.name}
@@ -160,18 +159,14 @@ function updateSidebarModelList(models, viewer) {
             if (event.target.checked) {
                 if (!loadedUrns.has(urn)) {
                     loadUrnToViewer(urn, viewer);
-                    // loadAndAlignModel(urn, viewer);
                 }
             } else {
-                // viewer.impl.modelQueue().getModels().forEach(m => console.log(m));
-
                 const model = loadedUrns.get(urn);
                 if (model) {
                     try {
                         viewer.unloadModel(model);
                         loadedUrns.delete(urn);
                         console.log(`Successfully unloaded ${urn}`);
-                        // logLoadedModels(viewer); // Debug helper
                     } catch (err) {
                         console.error(`Failed to unload ${urn}:`, err);
                     }
