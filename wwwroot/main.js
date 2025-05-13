@@ -1,4 +1,5 @@
 import { initViewer, loadModel, getMyAccesToken, loadModelNoOptions } from './viewer.js';
+// import { loadMultimodelExtension } from './viewer.js';
 
 initViewer(document.getElementById('preview')).then(viewer => {
     const urn = window.location.hash?.substring(1);
@@ -14,8 +15,6 @@ let currentCompositeModels = new Set();
 
 
 async function setupModelSelection(viewer, selectedUrn) {
-    const dropdown = document.getElementById('models');
-    dropdown.innerHTML = '';
     try {
         const resp = await fetch('/api/models');
         if (!resp.ok) {
@@ -24,13 +23,7 @@ async function setupModelSelection(viewer, selectedUrn) {
         let models = await resp.json();
         models.sort((a, b) => a.name.localeCompare(b.name));
 
-        dropdown.innerHTML = models.map(model => `<option value=${model.urn} ${model.urn === selectedUrn ? 'selected' : ''}>${model.name}</option>`).join('\n');
-        dropdown.onchange = () => onModelSelected(viewer, dropdown.value);
-        if (dropdown.value) {
-            // onModelSelected(viewer, dropdown.value);
-        }
-
-        updateSidebarModelList(models, dropdown.value, viewer);
+        updateSidebarModelList(models, viewer);
     } catch (err) {
         alert('Could not list models. See the console for more details.');
         console.error(err);
@@ -72,68 +65,6 @@ async function setupModelUpload(viewer) {
     };
 }
 
-async function onModelSelected(viewer, urn) {
-    if (window.onModelSelectedTimeout) {
-        clearTimeout(window.onModelSelectedTimeout);
-        delete window.onModelSelectedTimeout;
-    }
-    window.location.hash = urn;
-    try {
-        const resp = await fetch(`/api/models/${urn}/status`);
-        if (!resp.ok) {
-            throw new Error(await resp.text());
-        }
-        const status = await resp.json();
-        switch (status.status) {
-            case 'n/a':
-                showNotification(`Model has not been translated.`);
-                break;
-            case 'inprogress':
-                showNotification(`Model is being translated (${status.progress})...`);
-                window.onModelSelectedTimeout = setTimeout(onModelSelected, 5000, viewer, urn);
-                break;
-            case 'failed':
-                showNotification(`Translation failed. <ul>${status.messages.map(msg => `<li>${JSON.stringify(msg)}</li>`).join('')}</ul>`);
-                break;
-            default:
-                clearNotification();
-                // loadModel(viewer, urn);
-                // const accessToken = await getMyAccesToken();
-                // if (!accessToken) {
-                //     throw new Error('Could not obtain access token');
-                // }
-
-                // const loadOptions = {
-                //     globalOffset: { x: 0, y: 0, z: 0 },
-                //     placementTransform: new THREE.Matrix4(),
-                //     applyRefPoint: true,
-                //     keepCurrentModels: true
-                // };
-
-                // let model = await loadModel(viewer, urn, loadOptions);
-                // const modelData = model.getData();
-                // refModelData = model.getData();
-                // const rawOffset = refModelData.globalOffset;
-                // refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
-
-                // const correction = calculateOptimalAlignment(refModelData, modelData);
-                // loadOptions.placementTransform = correction.matrix;
-                // loadOptions.globalOffset = correction.offset;
-                // viewer.unloadModel(model);
-                // model = await loadModel(viewer, urn, loadOptions);
-
-                // debugModelInfo(model, 'modelo base carregado');
-                
-                loadedUrns = new Map();
-                loadedUrns.set(urn, model);
-                break; 
-        }
-    } catch (err) {
-        alert('Could not load model. See the console for more details.');
-        console.error(err);
-    }
-}
-
 function showNotification(message) {
     const overlay = document.getElementById('overlay');
     overlay.innerHTML = `<div class="notification">${message}</div>`;
@@ -147,115 +78,6 @@ function clearNotification() {
 }
 
 let loadedUrns = new Map();
-
-
-
-async function loadAndAlignModel(urn, viewer) {
-    // 1. First load the model with default settings to get its raw data
-    const initialLoadOptions = {
-        globalOffset: { x: 0, y: 0, z: 0 },
-        placementTransform: new THREE.Matrix4(),
-        applyRefPoint: true,
-        keepCurrentModels: true
-    };
-
-    const accessToken = await getMyAccesToken();
-    if (!accessToken) {
-        throw new Error('Could not obtain access token');
-    }
-
-    const isFirstModel = loadedUrns.size === 0;
-    const isReferenceModel = isFirstModel;
-    let model = null;
-
-    if(isFirstModel) {
-        model = await loadModelNoOptions(viewer, urn);
-        
-    }else{
-        model = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
-    }
-    
-    const modelData = model.getData();
-    
-    // 2. Analyze all available transformation data
-    const transformAnalysis = {
-        hasGlobalOffset: !!modelData.globalOffset,
-        hasPlacementWithOffset: !!modelData.placementWithOffset,
-        hasRefPointTransform: !!modelData.refPointTransform,
-        bbox: modelData.bbox
-    };
-    
-    console.log(`Transform analysis for ${urn}:`, transformAnalysis);
-
-    // 3. Determine the optimal loading strategy
-    let finalLoadOptions = { ...initialLoadOptions };
-    
-    if (isReferenceModel) {
-        // For reference model, store its data and load as-is
-        refModelData = modelData;
-        refGlobalOffset = modelData.globalOffset;
-        finalLoadOptions.globalOffset = refGlobalOffset;
-        // loadedUrns.set(urn, model);
-        // return model;
-    }
-    else if (modelData.refPointTransform && refModelData?.refPointTransform) {
-        // Case 1: Use refPointTransform if available in both models
-        const refMatrix = new THREE.Matrix4().fromArray(refModelData.refPointTransform);
-        const modelMatrix = new THREE.Matrix4().fromArray(modelData.refPointTransform);
-        const correctionMatrix = new THREE.Matrix4()
-            .copy(modelMatrix)
-            .invert()
-            .multiply(refMatrix);
-        
-        finalLoadOptions.placementTransform = correctionMatrix;
-        finalLoadOptions.globalOffset = refModelData.globalOffset;
-    }
-    else if (modelData.placementWithOffset) {
-        // Case 2: Use placementWithOffset if available
-        finalLoadOptions.placementTransform = new THREE.Matrix4()
-            .fromArray(modelData.placementWithOffset.elements);
-    }
-    else if (modelData.globalOffset) {
-        // Case 3: Use globalOffset as last resort
-        finalLoadOptions.globalOffset = modelData.globalOffset;
-    }
-
-    if (!isReferenceModel) {
-        finalLoadOptions.globalOffset = refGlobalOffset;
-    }
-
-    viewer.unloadModel(model);
-    const lastModelloaded = await addViewableWithToken(
-            viewer,
-            urn,
-            accessToken.access_token,
-            finalLoadOptions.placementTransform,
-            finalLoadOptions.globalOffset
-        );
-
-    loadedUrns.set(urn, lastModelloaded);
-    // 4. Reload the model with proper transforms if needed
-    if (hasTransformChanged(initialLoadOptions, finalLoadOptions)) {
-        return 
-    }else{
-        return await addViewableWithToken(
-            viewer,
-            urn,
-            accessToken.access_token,
-            finalLoadOptions.placementTransform,
-            finalLoadOptions.globalOffset
-        );
-    }
-}
-
-function hasTransformChanged(initial, final) {
-    return (
-        !initial.placementTransform.equals(final.placementTransform) ||
-        initial.globalOffset.x !== final.globalOffset.x ||
-        initial.globalOffset.y !== final.globalOffset.y ||
-        initial.globalOffset.z !== final.globalOffset.z
-    );
-}
 
 async function loadUrnToViewer(urn, viewer){
     try {
@@ -279,7 +101,6 @@ async function loadUrnToViewer(urn, viewer){
 
         const loadOptions = {
             globalOffset: modelData.globalOffset,//  { x: 0, y: 0, z: 0 },
-            // placementTransform: modelData.placementWithOffset,
             placementTransform: new THREE.Matrix4(),
             applyRefPoint: true,
             keepCurrentModels: true
@@ -299,7 +120,6 @@ async function loadUrnToViewer(urn, viewer){
                 console.warn('Alignment calculation failed, using default position:', err);
             }
         }
-        console.log('loadOptions', loadOptions);
         viewer.unloadModel(loadedCleanModel);
 
         const model = await addViewableWithToken(
@@ -319,7 +139,7 @@ async function loadUrnToViewer(urn, viewer){
     }
 }
 
-function updateSidebarModelList(models, selectedUrn, viewer) {
+function updateSidebarModelList(models, viewer) {
     const listContainer = document.getElementById('model-list');
     models.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -393,7 +213,6 @@ function updateSidebarModelList(models, selectedUrn, viewer) {
     
 }
 
-
 async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
     return new Promise((resolve, reject) => {
         // Troca o token antes de carregar o modelo
@@ -424,8 +243,6 @@ async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
         );
     });
 }
-
-
 
 
 
@@ -490,10 +307,10 @@ async function loadCompositeDesign(viewer, design) {
             loadedUrns.clear();
         }
         // viewer.unloadAllModels();
-        
         // Load primary model
         // Load primary model
         const primaryModel = await loadModel(viewer, design.primaryUrn);
+        loadedUrns.set(design.primaryUrn, primaryModel);
 
         const accessToken = await getMyAccesToken();
         if (!accessToken) {
@@ -512,6 +329,7 @@ async function loadCompositeDesign(viewer, design) {
                 matrix,
                 secondary.offset,
             )
+            loadedUrns.set(secondary.urn, added_model);
 
             // const model = await loadModel(viewer, secondary.urn);
 
@@ -526,6 +344,7 @@ async function loadCompositeDesign(viewer, design) {
             
             // Force visibility
             viewer.showAll();
+
         }));
         
         // Double-check visibility
