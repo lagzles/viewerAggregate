@@ -492,24 +492,45 @@ async function loadCompositeDesign(viewer, design) {
         // viewer.unloadAllModels();
         
         // Load primary model
+        // Load primary model
         const primaryModel = await loadModel(viewer, design.primaryUrn);
-        
-        // Load secondary models with their transforms
-        for (const secondary of design.secondaryModels) {
-            const model = await loadModel(viewer, secondary.urn);
-            
-            // Apply the stored transformation
-            const matrix = new THREE.Matrix4();
-            matrix.fromArray(secondary.matrix);
-            model.setPlacementTransform(matrix);
-            
-            // Apply global offset if exists
-            if (secondary.offset) {
-                model.setGlobalOffset(secondary.offset);
-            }
+
+        const accessToken = await getMyAccesToken();
+        if (!accessToken) {
+            throw new Error('Could not obtain access token');
         }
         
-        // Fit to view
+        // Parallel load all secondary models
+        await Promise.all(design.secondaryModels.map(async (secondary) => {
+            const matrix = new THREE.Matrix4();
+            matrix.fromArray(secondary.matrix);
+
+            const added_model = await addViewableWithToken(
+                viewer,
+                secondary.urn,
+                accessToken.access_token,
+                matrix,
+                secondary.offset,
+            )
+
+            // const model = await loadModel(viewer, secondary.urn);
+
+            // const matrix = new THREE.Matrix4();
+            // matrix.fromArray(secondary.matrix);
+            // model.setPlacementTransform(matrix);
+
+            // if (secondary.offset) {
+            //     model.resetGlobalOffset();
+            //     model.setGlobalOffset(secondary.offset);
+            // }
+            
+            // Force visibility
+            viewer.showAll();
+        }));
+        
+        // Double-check visibility
+        viewer.isolate([]); // Hide all
+        viewer.showAll(); // Show all
         viewer.fitToView();
     } catch (error) {
         console.error('Failed to load composite design:', error);
