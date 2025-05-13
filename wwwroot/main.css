@@ -128,3 +128,40 @@ body, html {
     cursor: pointer;
 }
 
+
+
+
+
+#transform-section {
+    position: fixed;
+    right: 20px;
+    top: 80px;
+    width: 300px;
+    background: white;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+    display: none;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+#transform-controls {
+    margin-bottom: 15px;
+}
+
+#transform-controls input {
+    width: 90%;
+    padding: 8px;
+    margin-bottom: 10px;
+}
+
+.transform-controls button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+}

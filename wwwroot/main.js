@@ -7,12 +7,11 @@ initViewer(document.getElementById('preview')).then(viewer => {
     setupCompositeControls(viewer);
     setToggleCompositeDesign();
     setupClearViewerButton(viewer);
+    setupTranslatingModelDiv(viewer);
 });
 
-let refGlobalOffset = null;
-let refModelData
 let compositeDesigns = [];
-let currentCompositeModels = new Set();
+let lastInsertedModelUrn = null;
 
 async function setToggleCompositeDesign(){
     document.getElementById('toggle-composite').addEventListener('click', () => {
@@ -21,6 +20,100 @@ async function setToggleCompositeDesign(){
         section.style.display = isVisible ? 'none' : 'block';
     });
 }
+
+async function setupTranslatingModelDiv(viewer){
+    document.getElementById('translate-model').addEventListener('click', () => {
+        const section = document.getElementById('transform-section');
+        const isVisible = section.style.display !== 'none' && section.style.display !== '';
+        section.style.display = isVisible ? 'none' : 'block';
+    });
+
+    document.getElementById('apply-transform').addEventListener('click', () => {
+        const x = parseFloat(document.getElementById('transform-x').value) || 0;
+        const y = parseFloat(document.getElementById('transform-y').value) || 0;
+        const z = parseFloat(document.getElementById('transform-z').value) || 0;
+        const rotDeg = parseFloat(document.getElementById('transform-rotation').value) || 0;
+        const rotRad = rotDeg * Math.PI / 180;
+
+        if (!lastInsertedModelUrn || !loadedUrns.has(lastInsertedModelUrn)) {
+            alert('Nenhum modelo recente encontrado para transformar.');
+            return;
+        }
+
+        const model = loadedUrns.get(lastInsertedModelUrn);
+        const fragList = model.getFragmentList();
+        const count = fragList.getCount();
+
+        const translation = new THREE.Matrix4().makeTranslation(x, y, z);
+        const rotation = new THREE.Matrix4().makeRotationY(rotRad);
+        const transform = new THREE.Matrix4().multiplyMatrices(translation, rotation);
+
+        // translateModel(viewer, model, x, y, z);
+        moveModel(viewer, model, x, y, z);
+        rotateModel(viewer, model, 0, 0, rotRad);
+        // Apply the transform to all fragments
+
+        // for (let i = 0; i < count; i++) {
+        //     fragList.updateFragmentTransform(i, transform);
+        // }
+        // fragList.updateAnimTransform();
+
+        viewer.impl.invalidate(true, true, true);
+    });
+}
+
+/**
+ * Rotates a model in world space while maintaining its position
+ * @param {object} viewer - Forge Viewer instance
+ * @param {object} model - Model to rotate
+ * @param {number} xAngle - Rotation around X-axis (radians)
+ * @param {number} yAngle - Rotation around Y-axis (radians)
+ * @param {number} zAngle - Rotation around Z-axis (radians)
+ */
+function rotateModel(viewer, model, xAngle = 0, yAngle = 0, zAngle = 0) {
+    // Get current global offset (or default to zero)
+    const offset = model.getGlobalOffset() || new THREE.Vector3(0, 0, 0);
+
+    // Create a rotation matrix (using Euler angles)
+    const rotation = new THREE.Matrix4().makeRotationFromEuler(
+        new THREE.Euler(xAngle, yAngle, zAngle, 'XYZ')
+    );
+
+    // Create a translation matrix (to move model back to its position after rotation)
+    const translation = new THREE.Matrix4().makeTranslation(offset.x, offset.y, offset.z);
+
+    // Combine: Translate → Rotate → Translate back to original position
+    const transform = new THREE.Matrix4()
+        .multiply(translation)          // Move to origin
+        .multiply(rotation)             // Apply rotation
+        .multiply(translation.clone().invert()); // Move back
+
+    // Apply the new transform
+    model.setPlacementTransform(transform);
+    
+    // Force viewer update
+    viewer.impl.invalidate(true, true, true);
+}
+
+function moveModel(viewer, model, x = 0, y = 0, z = 0) {
+    // Get or create initial offset
+    const currentOffset = model.getGlobalOffset() || new THREE.Vector3(0, 0, 0);
+    
+    // Calculate new offset
+    const newOffset = new THREE.Vector3(
+        currentOffset.x + x,
+        currentOffset.y + y,
+        currentOffset.z + z
+    );
+    
+    // Apply offset
+    model.setGlobalOffset(newOffset);
+    
+    // Update viewer
+    viewer.impl.invalidate(true, true, true);
+    console.log(`Model moved to (${newOffset.x}, ${newOffset.y}, ${newOffset.z})`);
+}
+
 
 async function setupClearViewerButton(viewer) {
     const clearButton = document.getElementById('clear-viewer');
@@ -31,7 +124,7 @@ async function setupClearViewerButton(viewer) {
             }
             loadedUrns.clear();
         }
-        
+
         viewer.impl.invalidate(true, true, true);
     });
 }
@@ -137,6 +230,8 @@ async function loadUrnToViewer(urn, viewer){
             const model = await addViewableWithToken(viewer, urn, accessToken.access_token, loadOptions.placementTransform, loadOptions.globalOffset);
             loadedUrns.set(urn, model);
         }
+
+        lastInsertedModelUrn = urn;
         clearNotification();
         viewer.showAll();
         

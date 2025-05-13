@@ -1,5 +1,3 @@
-/// import * as Autodesk from "@types/forge-viewer";
-import  MultiModelExtensionBase from './multiModelExtensionBase.js';
 
 export async function getMyAccesToken(){
     try {
@@ -25,16 +23,12 @@ async function getAccessToken(callback) {
     }
 }
 
-Autodesk.Viewing.theExtensionManager.registerExtension(
-    'MultiModelExtensionBase', 
-    MultiModelExtensionBase // Your extension class
-);
 
 export function initViewer(container) {
     return new Promise(function (resolve, reject) {
         Autodesk.Viewing.Initializer({ env: 'AutodeskProduction', getAccessToken }, function () {
             const config = {
-                extensions: ['Autodesk.DocumentBrowser', 'MultiModelExtensionBase']
+                extensions: ['Autodesk.DocumentBrowser' ]
             };
             const viewer = new Autodesk.Viewing.GuiViewer3D(container, config);
             viewer.start();
@@ -43,18 +37,6 @@ export function initViewer(container) {
             viewer.setLightPreset(0);
             resolve(viewer);
         });
-    });
-}
-
-export function loadMultimodelExtension(viewer) {
-    return new Promise(function (resolve, reject) {
-        viewer.loadExtension(MultiModelExtensionBase, {}).then(() => {
-                resolve(viewer);
-            }).catch(err => {
-                console.error('Error loading extension:\n', err);
-                reject(err);
-            });
-            resolve(viewer);
     });
 }
 

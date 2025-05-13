@@ -79,33 +79,6 @@ router.delete('/api/models/:urn', async (req, res) => {
 });
 
 
-// In-memory store (replace with database in production)
-const compositeDesignsStore = [];
-
-// router.get('/api/composite-designs', (req, res) => {
-//     res.json(compositeDesignsStore);
-// });
-
-// router.post('/api/composite-designs', express.json(), async (req, res) => {
-//     try {
-//         const { name, primaryUrn, secondaryUrns } = req.body;
-        
-//         // Create a new composite design
-//         const design = {
-//             id: `comp_${Date.now()}`,
-//             name,
-//             primaryUrn,
-//             secondaryModels: secondaryUrns,
-//             createdAt: new Date().toISOString()
-//         };
-        
-//         compositeDesignsStore.push(design);
-//         res.status(201).json(design);
-//     } catch (err) {
-//         res.status(500).json({ error: err.message });
-//     }
-// });
-
 
 router.get('/api/composite-designs', (req, res) => {
     if (!fs.existsSync(csvPath)) {
@@ -222,8 +195,6 @@ router.post('/api/composite-designs', express.json(), async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-
 
 
 

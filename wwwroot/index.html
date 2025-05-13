@@ -32,6 +32,16 @@
         </div>
         <div id="composite-list"></div>
     </div>
+    <div id="transform-section">
+        <h3>Transformar Último Modelo</h3>
+        <div id="transform-controls">
+            <label>X: <input type="number" id="transform-x" value="0" step="0.01"></label>
+            <label>Y: <input type="number" id="transform-y" value="0" step="0.01"></label>
+            <label>Z: <input type="number" id="transform-z" value="0" step="0.01"></label>
+            <label>Rotação Y (°): <input type="number" id="transform-rotation" value="0" step="1"></label>
+            <button id="apply-transform">Aplicar Transformação</button>
+        </div>
+    </div>
     <div id="preview"></div>
     <div id="overlay"></div>
     <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.js"></script>
