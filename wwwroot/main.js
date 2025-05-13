@@ -5,12 +5,36 @@ initViewer(document.getElementById('preview')).then(viewer => {
     setupModelSelection(viewer);
     setupModelUpload(viewer);
     setupCompositeControls(viewer);
+    setToggleCompositeDesign();
+    setupClearViewerButton(viewer);
 });
 
 let refGlobalOffset = null;
 let refModelData
 let compositeDesigns = [];
 let currentCompositeModels = new Set();
+
+async function setToggleCompositeDesign(){
+    document.getElementById('toggle-composite').addEventListener('click', () => {
+        const section = document.getElementById('composite-section');
+        const isVisible = section.style.display !== 'none' && section.style.display !== '';
+        section.style.display = isVisible ? 'none' : 'block';
+    });
+}
+
+async function setupClearViewerButton(viewer) {
+    const clearButton = document.getElementById('clear-viewer');
+    clearButton.addEventListener('click', () => {
+        if (loadedUrns.size > 0) {
+            for (const model of loadedUrns.values()) {
+                viewer.unloadModel(model);
+            }
+            loadedUrns.clear();
+        }
+        
+        viewer.impl.invalidate(true, true, true);
+    });
+}
 
 
 async function setupModelSelection(viewer) {
@@ -32,7 +56,7 @@ async function setupModelSelection(viewer) {
 async function setupModelUpload(viewer) {
     const upload = document.getElementById('upload');
     const input = document.getElementById('input');
-    const models = document.getElementById('models');
+    // const models = document.getElementById('models');
     upload.onclick = () => input.click();
     input.onchange = async () => {
         const file = input.files[0];
@@ -43,7 +67,7 @@ async function setupModelUpload(viewer) {
             data.append('model-zip-entrypoint', entrypoint);
         }
         upload.setAttribute('disabled', 'true');
-        models.setAttribute('disabled', 'true');
+        // models.setAttribute('disabled', 'true');
         showNotification(`Uploading model <em>${file.name}</em>. Do not reload the page.`);
         try {
             const resp = await fetch('/api/models', { method: 'POST', body: data });
@@ -58,7 +82,7 @@ async function setupModelUpload(viewer) {
         } finally {
             clearNotification();
             upload.removeAttribute('disabled');
-            models.removeAttribute('disabled');
+            // models.removeAttribute('disabled');
             input.value = '';
         }
     };
@@ -91,46 +115,31 @@ async function loadUrnToViewer(urn, viewer){
         let loadedCleanModel = null;
 
         if(isFirstModel) {
-            loadedCleanModel = await loadModelNoOptions(viewer, urn);
+            // loadedCleanModel = await loadModelNoOptions(viewer, urn);
+            const primaryModel = await loadModel(viewer, urn,{
+                globalOffset: { x: 0, y: 0, z: 0 },
+                placementTransform: new THREE.Matrix4(),
+                applyRefPoint: true,
+                keepCurrentModels: true
+            });
+            loadedUrns.set(urn, primaryModel);
         }else{
-            loadedCleanModel = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
+            // loadedCleanModel = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
+
+            const loadOptions = {
+
+                globalOffset:  { x: 0, y: 0, z: 0 },//modelData.globalOffset,//  { x: 0, y: 0, z: 0 },
+                placementTransform: new THREE.Matrix4(),
+                applyRefPoint: true,
+                keepCurrentModels: true
+            };
+
+            const model = await addViewableWithToken(viewer, urn, accessToken.access_token, loadOptions.placementTransform, loadOptions.globalOffset);
+            loadedUrns.set(urn, model);
         }
-
-        const modelData = loadedCleanModel.getData();
-
-        const loadOptions = {
-            globalOffset: modelData.globalOffset,//  { x: 0, y: 0, z: 0 },
-            placementTransform: new THREE.Matrix4(),
-            applyRefPoint: true,
-            keepCurrentModels: true
-        };
-
-        if (isFirstModel) {
-            refModelData = modelData; // model.getData();
-            const rawOffset = modelData.globalOffset;
-            refGlobalOffset = new THREE.Vector3(rawOffset.x, rawOffset.y, rawOffset.z);
-        }
-        
-        if (!isFirstModel && refModelData) {// || true) {
-            try {
-                loadOptions.globalOffset = refGlobalOffset;
-                loadOptions.placementTransform = new THREE.Matrix4();
-            } catch (err) {
-                console.warn('Alignment calculation failed, using default position:', err);
-            }
-        }
-        viewer.unloadModel(loadedCleanModel);
-
-        const model = await addViewableWithToken(
-            viewer,
-            urn,
-            accessToken.access_token,
-            loadOptions.placementTransform,
-            loadOptions.globalOffset
-        );
-
-        loadedUrns.set(urn, model);
         clearNotification();
+        viewer.showAll();
+        
     } catch (err) {
         console.error(`Error loading model ${urn}:`, err);
         event.target.checked = false; // Uncheck the box
@@ -301,47 +310,40 @@ async function loadCompositeDesign(viewer, design) {
             }
             loadedUrns.clear();
         }
-        // viewer.unloadAllModels();
         // Load primary model
-        // Load primary model
-        const primaryModel = await loadModel(viewer, design.primaryUrn);
-        loadedUrns.set(design.primaryUrn, primaryModel);
+
+        const mainModel = design.models.find(m => m.isMainModel);
+
+        const primaryModel = await loadModel(viewer, mainModel.urn,{
+            globalOffset: { x: mainModel.x_offset, y: mainModel.y_offset, z: mainModel.z_offset },
+            placementTransform: new THREE.Matrix4(),
+            applyRefPoint: true,
+            keepCurrentModels: true
+        });
+        loadedUrns.set(mainModel.urn, primaryModel);
 
         const accessToken = await getMyAccesToken();
         if (!accessToken) {
             throw new Error('Could not obtain access token');
         }
-        
-        // Parallel load all secondary models
-        await Promise.all(design.secondaryModels.map(async (secondary) => {
-            const matrix = new THREE.Matrix4();
-            matrix.fromArray(secondary.matrix);
+
+        const secondaryModels = design.models.filter(m => !m.isMainModel);
+        // Load secondary models
+        await Promise.all(secondaryModels.map(async (secondary) => {
 
             const added_model = await addViewableWithToken(
                 viewer,
                 secondary.urn,
                 accessToken.access_token,
-                matrix,
-                secondary.offset,
+                new THREE.Matrix4(),
+                { x: secondary.x_offset, y: secondary.y_offset, z: secondary.z_offset },
             )
             loadedUrns.set(secondary.urn, added_model);
 
-            // const model = await loadModel(viewer, secondary.urn);
-
-            // const matrix = new THREE.Matrix4();
-            // matrix.fromArray(secondary.matrix);
-            // model.setPlacementTransform(matrix);
-
-            // if (secondary.offset) {
-            //     model.resetGlobalOffset();
-            //     model.setGlobalOffset(secondary.offset);
-            // }
-            
-            // Force visibility
-            viewer.showAll();
-
         }));
         
+        viewer.showAll();
+
         // Double-check visibility
         viewer.isolate([]); // Hide all
         viewer.showAll(); // Show all
@@ -385,7 +387,7 @@ function setupCompositeControls(viewer) {
             
             secondaryModels.push({
                 urn,
-                matrix: data.placementWithOffset.elements,
+                matrix: data.placementWithOffset?.elements,
                 offset: data.globalOffset
             });
         }

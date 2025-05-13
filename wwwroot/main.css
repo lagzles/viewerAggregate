@@ -33,7 +33,7 @@ body, html {
 #overlay > .notification {
     margin: auto;
     padding: 1em;
-    max-width: 50%;
+    max-width: 100%;
     background: white;
 }
 
@@ -92,7 +92,7 @@ body, html {
     border-radius: 5px;
     box-shadow: 0 0 10px rgba(0,0,0,0.3);
     z-index: 1000;
-    display: block;
+    display: none;
     max-height: 80vh;
     overflow-y: auto;
 }
