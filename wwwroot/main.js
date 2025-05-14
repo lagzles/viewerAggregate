@@ -203,20 +203,17 @@ async function loadUrnToViewer(urn, viewer){
         let loadedCleanModel = null;
 
         if(isFirstModel) {
-            // loadedCleanModel = await loadModelNoOptions(viewer, urn);
             const primaryModel = await loadModel(viewer, urn,{
-                globalOffset: { x: 0, y: 0, z: 0 },
-                placementTransform: new THREE.Matrix4(),
+                globalOffset: { x: 0, y: 0, z: 0 },// refGlobalOffset,
+                placementTransform: new THREE.Matrix4(),// refPlacement,
                 applyRefPoint: true,
                 keepCurrentModels: true
             });
             loadedUrns.set(urn, primaryModel);
         }else{
-            // loadedCleanModel = await addViewableWithToken(viewer, urn, accessToken.access_token, null, null);
-
             const loadOptions = {
 
-                globalOffset:  { x: 0, y: 0, z: 0 },//modelData.globalOffset,//  { x: 0, y: 0, z: 0 },
+                globalOffset: { x: 0, y: 0, z: 0 },
                 placementTransform: new THREE.Matrix4(),
                 applyRefPoint: true,
                 keepCurrentModels: true
@@ -232,7 +229,6 @@ async function loadUrnToViewer(urn, viewer){
         
     } catch (err) {
         console.error(`Error loading model ${urn}:`, err);
-        event.target.checked = false; // Uncheck the box
         alert(`Failed to load model: ${err.message}`);
     }
 }
@@ -319,7 +315,8 @@ async function addViewableWithToken(viewer, urn, accessToken, xform, offset) {
             (doc) => {
                 const viewable = doc.getRoot().getDefaultGeometry();
                 const options = {
-                    keepCurrentModels: true
+                    keepCurrentModels: true,
+                    applyRefPoint: true,
                 };
                 if (xform) options.placementTransform = xform;
                 if (offset) options.globalOffset = offset;
