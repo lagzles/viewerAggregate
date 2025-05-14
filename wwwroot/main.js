@@ -49,14 +49,9 @@ async function setupTranslatingModelDiv(viewer){
         const transform = new THREE.Matrix4().multiplyMatrices(translation, rotation);
 
         // translateModel(viewer, model, x, y, z);
+        console.log(`Model Current Offset: ${model.getGlobalOffset()}`, model.getGlobalOffset());
         moveModel(viewer, model, x, y, z);
         rotateModel(viewer, model, 0, 0, rotRad);
-        // Apply the transform to all fragments
-
-        // for (let i = 0; i < count; i++) {
-        //     fragList.updateFragmentTransform(i, transform);
-        // }
-        // fragList.updateAnimTransform();
 
         viewer.impl.invalidate(true, true, true);
     });

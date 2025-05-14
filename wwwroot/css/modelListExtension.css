@@ -1,0 +1,40 @@
+.model-list-container {
+    padding: 10px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.model-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.model-item {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.model-item:last-child {
+    border-bottom: none;
+}
+
+.model-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.model-details {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    color: #666;
+}
+
+.model-details span {
+    margin: 2px 0;
+}
+
+.dialogButton {
+    margin: 0 5px;
+}
