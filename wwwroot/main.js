@@ -1,5 +1,4 @@
 import { initViewer, loadModel, getMyAccesToken, loadModelNoOptions } from './viewer.js';
-// import { loadMultimodelExtension } from './viewer.js';
 
 initViewer(document.getElementById('preview')).then(viewer => {
     setupModelSelection(viewer);
