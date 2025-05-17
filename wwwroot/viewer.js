@@ -1,4 +1,5 @@
 import TranslateModelExtension from './extension/modelTranslateExtension.js';
+import PropertySearchExtension from './extension/propertySearchExtension.js';
 
 export async function getMyAccesToken(){
     try {
@@ -29,12 +30,13 @@ export function initViewer(container) {
     return new Promise(function (resolve, reject) {
         Autodesk.Viewing.Initializer({ env: 'AutodeskProduction', getAccessToken }, function () {
             const config = {
-                extensions: ['Autodesk.DocumentBrowser', 'TranslateModelExtension' ]
+                extensions: ['Autodesk.DocumentBrowser', 'TranslateModelExtension', 'PropertySearchExtension' ]
             };
             const viewer = new Autodesk.Viewing.GuiViewer3D(container, config);
             viewer.start();
             viewer.setTheme('light-theme');
             viewer.loadExtension('TranslateModelExtension', TranslateModelExtension)
+            viewer.loadExtension('PropertySearchExtension', PropertySearchExtension)
             viewer.setBackgroundColor(255, 255, 255, 255, 255, 255);
             viewer.setLightPreset(0);
             resolve(viewer);

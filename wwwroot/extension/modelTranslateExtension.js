@@ -83,7 +83,6 @@ function createPanel() {
             this.originPointTool = null;
             this.destinationPointTool = null;
             
-
             setTimeout(() => {
                 this.refreshModelList();
             }, 0);
@@ -145,26 +144,16 @@ function createPanel() {
             this.body.appendChild(this.originBtn);
 
             this.originLabel = this.breackpoint(this.body);
-            // this.originLabel = document.createElement('label');
-            // this.originLabel.textContent = ' ';
-            // this.originLabel.style.display = 'block';
-            // this.originLabel.style.marginBottom = '4px';
-            // this.body.appendChild(this.originLabel);
 
             this.destinationBtn = document.createElement('button');
             this.destinationBtn.textContent = 'Selecionar Ponto de Destino';
             this.destinationBtn.style.marginBottom = '12px';
             this.body.appendChild(this.destinationBtn);
 
-            this.destinationLabel = document.createElement('label');
-            this.destinationLabel.textContent = ' ';
-            this.destinationLabel.style.display = 'block';
-            this.destinationLabel.style.marginBottom = '4px';
-            this.body.appendChild(this.destinationLabel);
+            this.destinationLabel = this.breackpoint(this.body);
             
             this.originPoint = null;
             this.destinationPoint = null;
-
 
             this.originBtn.onclick = () => {
                 this.capturePoint('origin');    
@@ -173,7 +162,6 @@ function createPanel() {
             this.destinationBtn.onclick = () => {
               this.capturePoint('destination');
             };
-            
             
             this.container.appendChild(this.body);
             // Rodapé com botão de fechar
@@ -215,7 +203,6 @@ function createPanel() {
                 return;
             }
 
-
             const closeButton = document.createElement('button');
             closeButton.textContent = 'Fechar';
             closeButton.style.padding = '6px 12px';
@@ -227,7 +214,6 @@ function createPanel() {
             closeButton.style.cursor = 'pointer';
         
             closeButton.onclick = () => {
-                console.log('Fechar painel');
                 if (this.container && this.container.parentNode) {
                     this.container.parentNode.removeChild(this.container);
                 }
@@ -238,7 +224,6 @@ function createPanel() {
                 removeMesh(this.viewer, 'destination');
             };
             this.footer.appendChild(closeButton);
-
             
             const translateButton = document.createElement('button');
             translateButton.textContent = 'Aplicar Translação';
@@ -251,7 +236,6 @@ function createPanel() {
             translateButton.style.cursor = 'pointer';
         
             translateButton.onclick = async () => {
-                console.log('Aplicar translação painel');
                 await this.applyTranslationToSelectedModel();
                 removeMesh(this.viewer, 'origin');
                 removeMesh(this.viewer, 'destination');
@@ -357,14 +341,12 @@ function createPanel() {
 
       calculateAndFillDistances() {
           if (!this.originPoint || !this.destinationPoint) {
-              return; // Wait until both points are set
+              return; 
           }
           
-          // Calculate the delta between points
           // const delta = new THREE.Vector3().subVectors(this.destinationPoint, this.originPoint);
           const delta = new THREE.Vector3().subVectors(this.originPoint, this.destinationPoint);
           
-          // Fill the input fields
           this.xInput.input.value = delta.x.toFixed(3);
           this.yInput.input.value = delta.y.toFixed(3);
           this.zInput.input.value = delta.z.toFixed(3);
