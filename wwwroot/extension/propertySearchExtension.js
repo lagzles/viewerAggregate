@@ -66,6 +66,7 @@ class PropertySearchPanel extends Autodesk.Viewing.UI.DockingPanel {
     this.container.classList.add('docking-panel-container-solid-color');
     this.footer=null;
 
+    this.finishedSearching = false;
   }
 
   initialize() {
@@ -126,6 +127,7 @@ class PropertySearchPanel extends Autodesk.Viewing.UI.DockingPanel {
 
     // Results count
     this.resultsCount = document.createElement('div');
+    this.resultsCount.className = 'results-count';
     this.resultsCount.style.marginBottom = '10px';
     this.resultsCount.style.fontSize = '12px';
     this.resultsCount.style.color = '#666';
@@ -133,6 +135,7 @@ class PropertySearchPanel extends Autodesk.Viewing.UI.DockingPanel {
 
     // Results list
     this.resultsList = document.createElement('div');
+    this.resultsList.className = 'results-list';
     this.resultsList.style.maxHeight = '200px';
     this.resultsList.style.overflowY = 'auto';
     this.resultsList.style.border = '1px solid #ddd';
@@ -238,83 +241,85 @@ async getProperties(dbId, viewer) {
             return;
         }
 
+        let modelsToProcess = 0;
         let modelsProcessed = 0;
         let propertiesFetched = 0;
         let totalPropertiesToFetch = 0;
-
+        let modelDbis = []
+        const modelDbIds = new Map();
         // First pass to count total properties to fetch
         models.forEach(model => {
             const instanceTree = model.getData().instanceTree;
             if (!instanceTree) {
-                modelsProcessed++;
-                return;
+              return;
             }
-            totalPropertiesToFetch += Object.keys(instanceTree.nodeAccess.dbIdToIndex).length;
+            modelsToProcess++;
+            let dbIds = Object.keys(instanceTree.nodeAccess.dbIdToIndex);
+            totalPropertiesToFetch += dbIds.length;
+            modelDbis.push(dbIds);
+            modelDbIds.set(model, dbIds); 
         });
+        totalPropertiesToFetch -= modelsToProcess; // Subtract the number of models to process
 
         if (totalPropertiesToFetch === 0) {
             resolve([]);
             return;
         }
 
-        models.forEach(async model => {
-            const instanceTree = model.getData().instanceTree;
-            if (!instanceTree) {
-                modelsProcessed++;
-                checkCompletion();
-                return;
-            }
+        for(const [model, dbIds ] of modelDbIds.entries()) {
 
-            const dbIds = Object.keys(instanceTree.nodeAccess.dbIdToIndex);
+        // modelDbis.forEach(async dbIds => {
             
             if (dbIds.length === 0) {
-                modelsProcessed++;
                 checkCompletion();
                 return;
             }
-            totalPropertiesToFetch += dbIds.length;
 
             for (let i = 0; i < dbIds.length; i++) {
                 let dbId = dbIds[i];
-                let propertiesFetched = await this.getProperties(Number(dbId), viewer);
 
-                if (!propertiesFetched ) {
-                    return;
-                }
-                if (!propertiesFetched?.properties) {
-                    return;
-                }
-                const foundProp = propertiesFetched.properties.find(p => {
-                    // Case-insensitive comparison for property name
-                    const nameMatch = p.displayName.toLowerCase().includes(propName.toLowerCase());
-                    
-                    // If value is specified, check for match (also case-insensitive)
-                    if (nameMatch && propValue) {
-                        return p.displayValue.toString().toLowerCase().includes(propValue.toLowerCase());
-                    }
-                    return nameMatch;
-                });
-                if (foundProp) {
-                    console.log("foundProp", foundProp)
-                    // Add the dbId to the matching list
-                    matchingDbIds.push(Number(dbId));
-                }
-                propertiesFetched++;
-                
+                model.getProperties(Number(dbId), element => {
+                  propertiesFetched++;
+
+                  const foundProp = element.properties.find(p => {
+                        const nameMatch = p.displayName.toLowerCase().includes(propName.toLowerCase());
+                        if (nameMatch) {
+                          return p.displayValue.toString().toLowerCase().includes(propValue.toLowerCase());
+                        }
+                        return nameMatch;
+                      });
+
+                      if (foundProp) {
+                        console.log("foundProp", foundProp)
+                        matchingDbIds.push([model, element.dbId]);
+                        checkCompletion();
+                      }
+
+                      checkCompletion();
+                }, null, model);
                 checkCompletion();
-            
             }
 
             modelsProcessed++;
             checkCompletion();
-        });
+        // });
+        };
 
         function checkCompletion() {
-            if (modelsProcessed === models.length && propertiesFetched === totalPropertiesToFetch) {
+            if (modelsProcessed >= modelsToProcess && propertiesFetched >= totalPropertiesToFetch) {
+                // this.finishedSearching = true;
+                console.log("Finished searching for properties");
                 resolve(matchingDbIds);
             }
         }
     });
+}
+
+isolateElementsFromAllModels(){
+  const models = this.viewer.impl.modelQueue().getModels();
+  models.forEach(model => {
+    this.viewer.isolate([], model);
+  });
 }
 
   displayResults(dbIds) {
@@ -328,7 +333,9 @@ async getProperties(dbId, viewer) {
     this.resultsList.innerHTML = '';
     const maxResultsToShow = 100; // Limit for performance
     
-    dbIds.slice(0, maxResultsToShow).forEach(dbId => {
+    dbIds.slice(0, maxResultsToShow).forEach(([model, dbId]) => {
+      console.log("model", model)
+      console.log("dbId", dbId)
       const resultItem = document.createElement('div');
       resultItem.textContent = `Element ${dbId}`;
       resultItem.style.padding = '4px';
@@ -336,18 +343,22 @@ async getProperties(dbId, viewer) {
       resultItem.style.borderBottom = '1px solid #eee';
       
       resultItem.onmouseover = () => {
-        this.viewer.isolate([dbId]);
+        this.isolateElementsFromAllModels()
+        this.viewer.isolate([dbId], model);
         this.viewer.impl.invalidate(true);
       };
       
       resultItem.onmouseout = () => {
-        this.viewer.isolate([]);
+        this.isolateElementsFromAllModels()
         this.viewer.impl.invalidate(true);
       };
       
       resultItem.onclick = () => {
-        this.viewer.select(dbId);
-        this.viewer.fitToView(dbId);
+        this.isolateElementsFromAllModels()
+        this.viewer.select(dbId, model);
+        this.viewer.fitToView(dbId, model);
+        console.log(`Selected element ${dbId}`);
+        this.viewer.isolate([dbId], model);
       };
       
       this.resultsList.appendChild(resultItem);
