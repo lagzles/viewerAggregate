@@ -318,7 +318,10 @@ async getProperties(dbId, viewer) {
 isolateElementsFromAllModels(){
   const models = this.viewer.impl.modelQueue().getModels();
   models.forEach(model => {
-    this.viewer.isolate([], model);
+    const instanceTree = model.getData().instanceTree;
+    const allDbids = Object.keys(instanceTree.nodeAccess.dbIdToIndex);
+
+    this.viewer.hide(allDbids, model);
   });
 }
 
@@ -332,6 +335,23 @@ isolateElementsFromAllModels(){
 
     this.resultsList.innerHTML = '';
     const maxResultsToShow = 100; // Limit for performance
+
+    // agrupar ids por modelo
+    const modelDbMap = new Map();
+
+    dbIds.forEach(([model, dbId]) => {
+      if (!modelDbMap.has(model)) {
+        modelDbMap.set(model, []);
+      }
+      modelDbMap.get(model).push(dbId);
+    });
+
+    this.isolateElementsFromAllModels()
+    // isolar elementos de todos os modelos que possuem
+    modelDbMap.forEach((model, dbids) => {
+      this.viewer.isolate(dbids, model);
+    });
+
     
     dbIds.slice(0, maxResultsToShow).forEach(([model, dbId]) => {
       console.log("model", model)
