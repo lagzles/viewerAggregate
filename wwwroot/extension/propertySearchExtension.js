@@ -315,17 +315,24 @@ async getProperties(dbId, viewer) {
     });
 }
 
-isolateElementsFromAllModels(){
+async isolateElementsFromAllModels(){
+  // this.viewer.restoreDefaultMaterial();
+  const alpha = 0.5;
+  const material = new THREE.MeshPhongMaterial({
+        transparent: true,
+        opacity: alpha
+    });
+  this.viewer.setQualityLevel(false, false);
   const models = this.viewer.impl.modelQueue().getModels();
-  models.forEach(model => {
-    const instanceTree = model.getData().instanceTree;
-    const allDbids = Object.keys(instanceTree.nodeAccess.dbIdToIndex);
-
-    this.viewer.hide(allDbids, model);
+  // const models = this.viewer.getModels();
+  models.forEach( async model => {
+    this.viewer.isolate([0], model);
   });
+
+  this.viewer.impl.invalidate(true);
 }
 
-  displayResults(dbIds) {
+  async displayResults(dbIds) {
     this.resultsCount.textContent = `Found ${dbIds.length} matching elements`;
     
     if (dbIds.length === 0) {
@@ -346,11 +353,7 @@ isolateElementsFromAllModels(){
       modelDbMap.get(model).push(dbId);
     });
 
-    this.isolateElementsFromAllModels()
-    // isolar elementos de todos os modelos que possuem
-    modelDbMap.forEach((model, dbids) => {
-      this.viewer.isolate(dbids, model);
-    });
+    await this.isolateElementsFromAllModels()
 
     
     dbIds.slice(0, maxResultsToShow).forEach(([model, dbId]) => {
