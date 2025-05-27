@@ -414,25 +414,40 @@ async function loadCompositeDesign(viewer, design) {
         }
 
         const secondaryModels = design.models.filter(m => !m.isMainModel);
-        // Load secondary models
-        await Promise.all(secondaryModels.map(async (secondary) => {
-
-            const added_model = await addViewableWithToken(
-                viewer,
-                secondary.urn,
-                accessToken.access_token,
-                new THREE.Matrix4(),
-                { x: secondary.x_offset, y: secondary.y_offset, z: secondary.z_offset },
+        secondaryModels.forEach(model => {
+            const model_options = {
+                            globalOffset: { x: model.x_offset, y: model.y_offset, z: model.z_offset },
+                            placementTransform: new THREE.Matrix4(),
+                            applyRefPoint: true,
+                            keepCurrentModels: true
+                        }
+            Autodesk.Viewing.Document.load(
+                'urn:' + model.urn,
+                doc =>{
+                    viewer.loadDocumentNode(
+                        doc, doc.getRoot().getDefaultGeometry(), model_options).then(added_model => {
+                            loadedUrns.set(model.urn, added_model);
+                            resolve(added_model);
+                        })
+                }
             )
-            loadedUrns.set(secondary.urn, added_model);
+        });
 
-        }));
+        // Load secondary models
+        // await Promise.all(secondaryModels.map(async (secondary) => {
+
+        //     const added_model = await addViewableWithToken(
+        //         viewer,
+        //         secondary.urn,
+        //         accessToken.access_token,
+        //         new THREE.Matrix4(),
+        //         { x: secondary.x_offset, y: secondary.y_offset, z: secondary.z_offset },
+        //     )
+        //     loadedUrns.set(secondary.urn, added_model);
+
+        // }));
         
         viewer.showAll();
-
-        // Double-check visibility
-        viewer.isolate([]); // Hide all
-        viewer.showAll(); // Show all
         viewer.fitToView();
     } catch (error) {
         console.error('Failed to load composite design:', error);
